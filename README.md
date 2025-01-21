@@ -17,21 +17,21 @@ A network request interceptor that automatically captures and logs request/respo
 
 ```bash
 # Using npm
-npm install @your-org/datadog-rum-interceptor
+npm install @kyletaylored/datadog-rum-interceptor
 
 # Using yarn
-yarn add @your-org/datadog-rum-interceptor
+yarn add @kyletaylored/datadog-rum-interceptor
 ```
 
 Or via CDN:
 ```html
-<script src="https://npm.pkg.github.com/@your-org/datadog-rum-interceptor/dist/datadog-rum-interceptor.umd.js"></script>
+<script src="https://npm.pkg.github.com/@kyletaylored/datadog-rum-interceptor/dist/datadog-rum-interceptor.min.js"></script>
 ```
 
 ## Prerequisites
 
-- @datadog/browser-rum >= 4.0.0
-- @datadog/browser-logs >= 4.0.0 (if using logs feature)
+- @datadog/browser-rum >= 6.0.0
+- @datadog/browser-logs >= 6.0.0 (if using logs feature)
 
 ## Usage
 
@@ -51,7 +51,7 @@ datadogRum.init({
 Then add the interceptor:
 
 ```javascript
-import { DDRumInterceptor } from '@your-org/datadog-rum-interceptor';
+import { DDRumInterceptor } from '@kyletaylored/datadog-rum-interceptor';
 
 const interceptor = new DDRumInterceptor({
   // All configuration is optional
@@ -112,7 +112,7 @@ const interceptor = new DDRumInterceptor({
 Full TypeScript definitions are included:
 
 ```typescript
-import { DDRumInterceptor, DDInterceptorConfig } from '@your-org/datadog-rum-interceptor';
+import { DDRumInterceptor, DDInterceptorConfig } from '@kyletaylored/datadog-rum-interceptor';
 
 const config: DDInterceptorConfig = {
   enableLogs: true,

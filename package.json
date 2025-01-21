@@ -1,15 +1,15 @@
 {
   "name": "@kyletaylored/datadog-rum-interceptor",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Network request interceptor with Datadog RUM and Logs integration",
   "author": "Kyle Taylor <kyle.taylor@datadoghq.com>",
-  "main": "dist/index.js",
+  "main": "dist/datadog-rum-interceptor.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
-    "prepare": "npm run build",
-    "test": "echo \"No test specified\" && exit 0"
+    "build:watch": "webpack --watch",
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "terser-webpack-plugin": "^5.3.11",
@@ -29,6 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kyletaylored/datadog-rum-interceptor.git"
-  }
+    "url": "https://github.com/kyletaylored/datadog-rum-interceptor.git"
+  },
+  "license": "MIT"
 }
