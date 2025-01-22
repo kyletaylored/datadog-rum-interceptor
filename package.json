@@ -11,6 +11,11 @@
     "build:watch": "webpack --watch",
     "prepare": "npm run build"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "devDependencies": {
     "terser-webpack-plugin": "^5.3.11",
     "ts-loader": "^9.5.2",
