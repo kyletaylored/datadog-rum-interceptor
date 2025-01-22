@@ -40,7 +40,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Simulate GitHub Packages Publish
-        run: npm pack --dry-run
+        run: npm ci && npm pack --dry-run
 
   npm-dry-run:
     needs: build
@@ -57,7 +57,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Simulate npm Publish
-        run: npm pack --dry-run
+        run: npm ci && npm pack --dry-run
 
   github-publish:
     if: github.event_name == 'release'
