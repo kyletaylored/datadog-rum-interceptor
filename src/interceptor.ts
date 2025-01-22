@@ -42,7 +42,7 @@ export class DDRumInterceptor {
 
         // Check if RUM is available
         if (!datadogRum?.getInternalContext) {
-            throw new Error('Datadog RUM is required but not found. Please ensure it is installed and initialized.');
+            throw new Error('Datadog RUM must be initialized before DDRumInterceptor.');
         }
 
         if (this.config.enableLogs && !datadogLogs?.createLogger) {
