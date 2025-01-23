@@ -1,36 +1,35 @@
 # Datadog RUM Interceptor
 
-A lightweight library that **intercepts** HTTP/HTTPS/fetch/XMLHttpRequest requests in **Node** or the **browser**, then forwards request/response data to **Datadog** logs for easier debugging. Optionally integrates with **Datadog RUM** to attach custom attributes for deeper correlation.
+A lightweight library that intercepts **HTTP/HTTPS** (Node) or **fetch/XMLHttpRequest** (Browser) requests, forwarding request/response data to **Datadog** logs or RUM **if** they are detected (e.g., `window.DD_LOGS`, `window.DD_RUM`). It supports both environments via separate Vite builds:
+
+1. **Browser** build: Uses `FetchInterceptor` and `XMLHttpRequestInterceptor`.  
+2. **Node** build: Uses `ClientRequestInterceptor` and `XMLHttpRequestInterceptor`.
 
 ---
 
 ## Table of Contents
 
-1. [Key Features](#key-features)  
+1. [Features](#features)  
 2. [Installation](#installation)  
-3. [Usage](#usage)  
-   - [Node (CommonJS)](#node-commonjs)  
-   - [ES Module](#es-module)  
-   - [Browser via `<script>`](#browser-via-script)  
-4. [How It Works](#how-it-works)  
-5. [API Reference](#api-reference)  
-   - [createRequestInterceptor(options)](#createrequestinterceptoroptions)  
-6. [Example Configurations](#example-configurations)  
-   - [Datadog Browser Logs](#datadog-browser-logs)  
-   - [Datadog RUM Integration](#datadog-rum-integration)  
-7. [Building from Source](#building-from-source)  
-8. [Running Tests](#running-tests)  
-9. [License](#license)
+3. [Project Structure](#project-structure)  
+4. [Building](#building)  
+5. [Usage](#usage)  
+   - [Browser UMD](#browser-umd)  
+   - [Browser ES Module](#browser-es-module)  
+   - [Node (CommonJS/ESM)](#node-commonjsesm)  
+6. [Configuration Options](#configuration-options)  
+7. [Testing](#testing)  
+8. [License](#license)
 
 ---
 
-## 1. Key Features
+## 1. Features
 
-- **Captures** request and response data (bodies, headers, status, etc.) in both Node.js and browser environments.  
-- **Logs** this data to **Datadog Browser Logs** for troubleshooting.  
-- **Correlates** logs with traces by extracting `x-datadog-trace-id` headers.  
-- **Optionally** enriches **Datadog RUM** events to show relevant request details in RUM sessions.  
-- **Composable**: Start and stop intercepting at any time by invoking the returned controller.
+- **Interception**: Captures HTTP/HTTPS requests (Node) or fetch/XHR requests (Browser).  
+- **Datadog Integration**: If `DD_LOGS` or `DD_RUM` is available, logs request/response data and optional RUM actions.  
+- **Flexible**: Does not auto-initialize Datadog logs; you can handle that separately.  
+- **Node & Browser**: Separate builds ensure you only bundle relevant interceptors per environment.  
+- **Stop Interception**: A simple `.stop()` method disposes the hooks when you’re done.
 
 ---
 
@@ -48,205 +47,152 @@ yarn add @kyletaylored/datadog-rum-interceptor
 
 ---
 
-## 3. Usage
+## 3. Project Structure
 
-### Node (CommonJS)
+Here’s a high-level view of how the **two-build** approach is organized:
 
-```js
-const { createRequestInterceptor } = require('@kyletaylored/datadog-rum-interceptor')
+```
+src/
+├─ baseInterceptor.js       # Shared logic (logs, RUM integration)
+├─ browserIndex.js          # Browser entry (FetchInterceptor + XHR)
+├─ nodeIndex.js             # Node entry (ClientRequestInterceptor + XHR)
+└─ ...                     # Other utility or type files
 
-const interceptorController = createRequestInterceptor({
-  datadogLogsConfig: {
-    clientToken: 'YOUR_DD_CLIENT_TOKEN',
-    site: 'datadoghq.com'
+dist/
+├─ browser/
+│   ├─ datadog-rum-interceptor.browser.es.js
+│   └─ datadog-rum-interceptor.browser.umd.js
+└─ node/
+    ├─ datadog-rum-interceptor.node.cjs.js
+    └─ datadog-rum-interceptor.node.es.js
+
+test/
+├─ browserInterceptor.test.js  # Jest + jsdom
+└─ nodeInterceptor.test.js     # Jest in Node env
+```
+
+- **`browserIndex.js`** imports only `FetchInterceptor` and `XMLHttpRequestInterceptor`.
+- **`nodeIndex.js`** imports `ClientRequestInterceptor` and `XMLHttpRequestInterceptor`.
+- **`baseInterceptor.js`** sets up the shared logging logic (`DD_LOGS`, `DD_RUM` detection, etc.) with a single function.
+
+---
+
+## 4. Building
+
+We use **Vite** with **two config files**:
+
+- **`vite.config.browser.js`**: Builds the **browser** version into `dist/browser/`.  
+- **`vite.config.node.js`**: Builds the **Node** version into `dist/node/`.  
+
+**Scripts** in `package.json`:
+
+```jsonc
+{
+  "scripts": {
+    "build:browser": "vite build --config vite.config.browser.js",
+    "build:node": "vite build --config vite.config.node.js",
+    "build": "npm run build:browser && npm run build:node"
   }
-})
-
-// Make your http/https requests
-// The interceptor listens for them and, if window is undefined (Node environment),
-// it won't call datadogLogs.init(). The requests themselves are still captured.
+}
 ```
 
-> **Note**: Since `@datadog/browser-logs` is primarily a browser SDK, Node usage may not actually forward logs to Datadog unless you have an environment that simulates or supports the browser logs library. Consider using [Datadog’s Node logs library](https://www.npmjs.com/package/@datadog/datadog-ci) if you need direct Node logging.
+Running:
 
-### ES Module
-
-If your environment supports ESM or you’re using a bundler like Webpack, Rollup, or Vite:
-
-```js
-import { createRequestInterceptor } from '@kyletaylored/datadog-rum-interceptor'
-
-const interceptorController = createRequestInterceptor({
-  datadogLogsConfig: {
-    clientToken: 'YOUR_DD_CLIENT_TOKEN',
-    site: 'datadoghq.com',
-    forwardErrorsToLogs: true,
-    sessionSampleRate: 100
-  },
-  enableRumIntegration: true
-})
-
-// ...
-// To stop intercepting later:
-// interceptorController.stop()
+```bash
+npm run build
 ```
 
-### Browser via `<script>`
+produces:
 
-Include the **browser build** in a script tag (e.g., from your own CDN or [unpkg](https://unpkg.com)):
+```
+dist/
+├─ browser/
+│   ├─ datadog-rum-interceptor.browser.es.js
+│   └─ datadog-rum-interceptor.browser.umd.js
+└─ node/
+    ├─ datadog-rum-interceptor.node.cjs.js
+    └─ datadog-rum-interceptor.node.es.js
+```
+
+---
+
+## 5. Usage
+
+### 5.1 Browser UMD
+
+If you load **`dist/browser/datadog-rum-interceptor.browser.umd.js`** directly in a `<script>` tag, it attaches itself to `window.DD_RUM_REQUEST` (assuming `name: 'DD_RUM_REQUEST'` in your Vite config).
 
 ```html
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Datadog RUM Interceptor Demo</title>
-    <!-- Optional: Datadog RUM script if you'd like RUM integration -->
-    <script src="https://www.datadoghq-browser-agent.com/us1/v4/datadog-rum.js"></script>
-    <script>
-      if (window.DD_RUM) {
-        window.DD_RUM.init({
-          clientToken: 'YOUR_RUM_CLIENT_TOKEN',
-          applicationId: 'YOUR_APP_ID',
-          site: 'datadoghq.com'
-        })
-      }
-    </script>
+<script src="https://www.datadoghq-browser-agent.com/us1/v6/datadog-logs.js"></script>
+<script>
+  // Optionally init Datadog logs
+  window.DD_LOGS && window.DD_LOGS.init({
+    clientToken: '...',
+    site: 'datadoghq.com'
+  })
+</script>
 
-    <!-- The interceptor library (UMD or ES build from dist/browser) -->
-    <script src="https://unpkg.com/@kyletaylored/datadog-rum-interceptor/dist/browser/index.js"></script>
-  </head>
-  <body>
-    <script>
-      // The library attaches itself to window.DDRumInterceptor
-      const { createRequestInterceptor } = window.DDRumInterceptor
+<script src="dist/browser/datadog-rum-interceptor.browser.umd.js"></script>
+<script>
+  // Now window.DD_RUM_REQUEST is available
+  const interceptor = window.DD_RUM_REQUEST.createBrowserInterceptor({
+    enableRumIntegration: true
+    // ...
+  })
 
-      const interceptorController = createRequestInterceptor({
-        datadogLogsConfig: {
-          clientToken: 'YOUR_DD_CLIENT_TOKEN',
-          site: 'datadoghq.com'
-        },
-        enableRumIntegration: true
-      })
-
-      // Now any fetch or XHR calls will be intercepted and logged to Datadog
-      fetch('https://jsonplaceholder.typicode.com/todos/1')
-        .then(resp => resp.json())
-        .then(data => console.log('Fetch response:', data))
-    </script>
-  </body>
-</html>
+  // interceptor.stop() to end interception
+</script>
 ```
 
----
+### 5.2 Browser ES Module
 
-## 4. How It Works
-
-**Under the Hood:**
-
-1. In **Node**, the library sets up interceptors for `http`/`https` requests using [`ClientRequestInterceptor`](https://github.com/mswjs/interceptors/tree/main/packages/interceptors/ClientRequest).  
-2. In the **browser**, it intercepts `fetch` and `XMLHttpRequest` using [`FetchInterceptor`](https://github.com/mswjs/interceptors/tree/main/packages/interceptors/fetch) and [`XMLHttpRequestInterceptor`](https://github.com/mswjs/interceptors/tree/main/packages/interceptors/XMLHttpRequest).  
-3. When a request completes, the interceptor captures **request/response bodies**, **headers**, and **status**.  
-4. If running in a browser (i.e., `typeof window !== 'undefined'`), it attempts to log these details to **Datadog Browser Logs**—**including** any `x-datadog-trace-id` header for correlation.  
-5. If **RUM** is enabled (`enableRumIntegration = true`), the library tries to attach an action to the global RUM object (`window.DD_RUM` by default) with key info about the intercepted request.
-
----
-
-## 5. API Reference
-
-### `createRequestInterceptor(options)`
-
-Creates and applies interceptors for the **Node** or **browser** environment automatically:
-
-```ts
-type DatadogBrowserLogsConfig = {
-  clientToken: string
-  site: string
-  forwardErrorsToLogs?: boolean
-  sessionSampleRate?: number
-  // ...other properties supported by @datadog/browser-logs
-}
-
-type InterceptorOptions = {
-  datadogLogsConfig?: DatadogBrowserLogsConfig
-  enableRumIntegration?: boolean
-  rumGlobalVarName?: string // defaults to "DD_RUM"
-}
-
-function createRequestInterceptor(options?: InterceptorOptions): {
-  stop: () => void
-}
-```
-
-**Parameters**:  
-- **datadogLogsConfig**: Configuration for Datadog Browser Logs. If in a **browser** environment and these values are valid, the library calls `datadogLogs.init()`.  
-  - `clientToken`: Your Datadog Logs client token (required).  
-  - `site`: Datadoghq site, e.g. `"datadoghq.com"`.  
-  - `forwardErrorsToLogs`: Capture console errors into logs.  
-  - `sessionSampleRate`: Sample rate for sessions, defaults to `100`.  
-- **enableRumIntegration**: If `true`, attaches request details to RUM events if `window.DD_RUM` is present.  
-- **rumGlobalVarName**: By default `'DD_RUM'`, the global variable name for the RUM object.
-
-**Returns**:  
-- An **object** with a single method `stop()`, which disposes the interception hooks.
-
----
-
-## 6. Example Configurations
-
-### Datadog Browser Logs
-
-To initialize logs in the browser, you must provide a valid `clientToken` and `site`:
+You can also import the **ES** build from `dist/browser/datadog-rum-interceptor.browser.es.js` in a modern environment or bundler:
 
 ```js
-createRequestInterceptor({
-  datadogLogsConfig: {
-    clientToken: 'abc123',
-    site: 'datadoghq.com',
-    forwardErrorsToLogs: true,
-    sessionSampleRate: 100
-  }
+import { createBrowserInterceptor } from './dist/browser/datadog-rum-interceptor.browser.es.js'
+
+const interceptor = createBrowserInterceptor({
+  enableRumIntegration: true
 })
+// ...
+interceptor.stop()
 ```
 
-If `clientToken` or `site` is missing, the library logs a warning and skips Datadog logs setup.
+### 5.3 Node (CommonJS/ESM)
 
-### Datadog RUM Integration
+If you’re using **Node** (CJS or ESM), import the build from `dist/node/`:
 
-If you want to add an action to **Datadog RUM** for each request, set `enableRumIntegration: true`. Then, if `window.DD_RUM` (or your custom `rumGlobalVarName`) supports `addAction()`, each intercepted request triggers a custom action:
+- **CommonJS**:
+  ```js
+  const { createNodeInterceptor } = require('@kyletaylored/datadog-rum-interceptor/dist/node/datadog-rum-interceptor.node.cjs.js')
+  
+  const interceptor = createNodeInterceptor()
+  // ...
+  interceptor.stop()
+  ```
+- **ESM**:
+  ```js
+  import { createNodeInterceptor } from '@kyletaylored/datadog-rum-interceptor/dist/node/datadog-rum-interceptor.node.es.js'
+
+  const interceptor = createNodeInterceptor()
+  // ...
+  interceptor.stop()
+  ```
+
+> **Note**: Datadog Browser Logs typically doesn’t run in pure Node. If you have a Node environment that somehow sets `global.DD_LOGS`, the library will detect and use it. Otherwise, it won’t attempt to log.
+
+---
+
+## 6. Configuration Options
+
+Both `createBrowserInterceptor` and `createNodeInterceptor` accept similar options:
 
 ```js
-createRequestInterceptor({
-  datadogLogsConfig: { clientToken: '...', site: '...' },
-  enableRumIntegration: true,
-  rumGlobalVarName: 'DD_RUM' // optional
-})
+{
+  enableRumIntegration?: boolean,     // default false
+  rumGlobalVarName?: string          // default "DD_RUM"
+}
 ```
 
-You’ll see an event named `"intercepted_request"` in your RUM session data, containing request method, URL, trace ID (if any), and status.
-
----
-
-## 7. Building from Source
-
-If you’d like to modify the library:
-
-1. **Clone** this repo:
-   ```bash
-   git clone https://github.com/kyletaylored/datadog-rum-interceptor.git
-   ```
-2. **Install** dependencies:
-   ```bash
-   cd datadog-rum-interceptor
-   npm install
-   ```
-3. **Build** all targets (Node CJS, ESM, Browser):
-   ```bash
-   npm run build
-   ```
-4. Final bundles are in the `dist/` directory.
-
----
-
-### Questions or Issues?
-
-Please open a discussion or file an [issue](https://github.com/kyletaylored/datadog-rum-interceptor/issues). We’re happy to help!
+- **`enableRumIntegration`**: If `true`, the library tries to call `window.DD_RUM.addAction(...)` (or your custom global) for each request.  
+- **`rumGlobalVarName`**: The name of the RUM global variable, typically `'DD_RUM'`.
