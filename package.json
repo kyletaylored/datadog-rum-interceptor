@@ -1,44 +1,87 @@
 {
   "name": "@kyletaylored/datadog-rum-interceptor",
   "version": "0.0.1",
-  "description": "Network request interceptor with Datadog RUM and Logs integration",
   "author": "Kyle Taylor <kyle.taylor@datadoghq.com>",
-  "main": "dist/datadog-rum-interceptor.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "webpack --mode production",
-    "build:dev": "webpack --mode development",
-    "build:watch": "webpack --watch",
-    "prepare": "npm run build",
-    "test": "jest"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "devDependencies": {
-    "@datadog/browser-logs": ">=6.0.0",
-    "@datadog/browser-rum": ">=6.0.0",
-    "@types/jest": "^29.5.14",
-    "jest": "^29.7.0",
-    "terser-webpack-plugin": "^5.3.11",
-    "ts-jest": "^29.2.5",
-    "ts-loader": "^9.5.2",
-    "typescript": "^4.9.5",
-    "webpack": "^5.97.1",
-    "webpack-cli": "^4.10.0"
-  },
-  "peerDependencies": {
-    "@datadog/browser-logs": ">=6.0.0",
-    "@datadog/browser-rum": ">=6.0.0"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/kyletaylored/datadog-rum-interceptor.git"
   },
-  "license": "MIT"
+  "source": "src/index.js",
+  "main": "dist/node/index.cjs",
+  "module": "dist/module/index.mjs",
+  "browser": "dist/browser/index.js",
+  "exports": {
+    ".": {
+      "node": "./dist/node/index.cjs",
+      "import": "./dist/module/index.mjs",
+      "browser": "./dist/browser/index.js",
+      "default": "./dist/module/index.mjs"
+    }
+  },
+  "scripts": {
+    "clean:output": "rimraf dist .parcel-cache",
+    "build": "npm run clean:output && npm run build:node && npm run build:module && npm run build:browser",
+    "build:node": "parcel build src/index.node.js --target node --dist-dir dist/node --no-source-maps",
+    "build:module": "parcel build src/index.js --target module --dist-dir dist/module --no-source-maps",
+    "build:browser": "parcel build src/index.browser.js --target browser --dist-dir dist/browser --no-source-maps",
+    "test": "jest",
+    "prepare": "npm run build"
+  },
+  "targets": {
+    "node": {
+      "context": "node",
+      "outputFormat": "commonjs",
+      "isLibrary": true,
+      "engines": {
+        "node": ">=14.0.0"
+      }
+    },
+    "module": {
+      "context": "browser",
+      "outputFormat": "esmodule",
+      "isLibrary": true,
+      "engines": {
+        "browsers": ">= 0.25%"
+      }
+    },
+    "browser": {
+      "context": "browser",
+      "isLibrary": false,
+      "optimize": true,
+      "engines": {
+        "browsers": ">= 0.25%"
+      }
+    }
+  },
+  "keywords": [
+    "mswjs",
+    "interceptor",
+    "datadog",
+    "logs",
+    "rum",
+    "parcel"
+  ],
+  "dependencies": {
+    "@datadog/browser-logs": "latest",
+    "@mswjs/interceptors": "^0.37.5",
+    "@swc/helpers": "^0.5.15"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-env": "^7.26.0",
+    "@parcel/optimizer-terser": "^2.13.3",
+    "babel-jest": "^29.7.0",
+    "buffer": "^6.0.3",
+    "events": "^3.3.0",
+    "https-browserify": "^1.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "parcel": "^2.13.3",
+    "process": "^0.11.10",
+    "rimraf": "^6.0.1",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "url": "^0.11.4"
+  }
 }

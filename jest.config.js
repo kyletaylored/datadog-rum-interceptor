@@ -1,12 +1,9 @@
 module.exports = {
-    preset: 'ts-jest',
+    // By default, run in a Node test environment
     testEnvironment: 'node',
-    roots: ['<rootDir>/src'],
-    testMatch: ['**/__tests__/**/*.test.ts'],
-    moduleFileExtensions: ['ts', 'tsx', 'js'],
-    globals: {
-        'ts-jest': {
-            isolatedModules: true,
-        },
-    },
-};
+
+    // Tell Jest to transpile files with babel-jest
+    transform: {
+        '^.+\\.[tj]sx?$': 'babel-jest'
+    }
+}
