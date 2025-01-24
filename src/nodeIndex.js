@@ -1,18 +1,29 @@
-// nodeIndex.js
+/**
+ * @file nodeIndex.js
+ * @description Entry for the Node build, importing ClientRequest and XHR interceptors.
+ */
+
 import { createBaseInterceptor } from './baseInterceptor.js'
 import { ClientRequestInterceptor } from '@mswjs/interceptors/ClientRequest'
 import { XMLHttpRequestInterceptor } from '@mswjs/interceptors/XMLHttpRequest'
+import { datadogLogs } from '@datadog/browser-logs' // Externalized
+import { datadogRum } from '@datadog/browser-rum'   // Externalized
 
 /**
- * Create the Node-specific request interceptor.
- * @param {object} [options]
+ * Create a Node interceptor with ClientRequest and XHR interceptors.
+ *
+ * @param {Object} options - Interceptor options.
  * @returns {{ stop: () => void }}
  */
-export function createNodeInterceptor(options) {
+export function createNodeInterceptor(options = {}) {
     const environmentInterceptors = [
         new ClientRequestInterceptor(),
         new XMLHttpRequestInterceptor()
     ]
 
-    return createBaseInterceptor(options, environmentInterceptors)
+    return createBaseInterceptor({
+        ...options,
+        datadogLogs,
+        datadogRum
+    }, environmentInterceptors)
 }

@@ -15,7 +15,12 @@ export default defineConfig({
             fileName: (format) => `datadog-rum-interceptor.node.${format}.js`,
         },
         rollupOptions: {
-            external: ['@mswjs/interceptors'],
+            // Externalize @mswjs/interceptors and Datadog libraries
+            external: [
+                '@mswjs/interceptors',
+                '@datadog/browser-rum',
+                '@datadog/browser-logs'
+            ],
             output: {
                 entryFileNames: 'datadog-rum-interceptor.node.[format].js'
             }

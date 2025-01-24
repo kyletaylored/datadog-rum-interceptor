@@ -14,7 +14,11 @@ export default defineConfig({
             formats: ['es', 'umd']
         },
         rollupOptions: {
-            external: [], // Remove all external dependencies
+            // Externalize Datadog RUM and Logs libraries
+            external: [
+                '@datadog/browser-rum',
+                '@datadog/browser-logs'
+            ],
             plugins: [
                 nodeResolve({
                     browser: true,
@@ -26,6 +30,11 @@ export default defineConfig({
                 })
             ],
             output: {
+                // Define global variables for externalized dependencies in UMD build
+                globals: {
+                    '@datadog/browser-rum': 'datadogRum',
+                    '@datadog/browser-logs': 'datadogLogs'
+                },
                 format: 'umd',
                 name: 'DD_RUM_REQUEST',
                 inlineDynamicImports: true

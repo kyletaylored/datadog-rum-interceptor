@@ -4,7 +4,7 @@ const { createNodeInterceptor } = require('../src/nodeIndex.js')
 describe('Node Interceptor Tests', () => {
     it('should initialize and stop the Node interceptor without errors', () => {
         // Initialize
-        const interceptor = createNodeInterceptor({ enableRumIntegration: true })
+        const interceptor = createNodeInterceptor({})
         expect(typeof interceptor.stop).toBe('function')
 
         // Optionally test some Node http/https usage here...

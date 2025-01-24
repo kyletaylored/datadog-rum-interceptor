@@ -11,8 +11,7 @@ describe('Browser Interceptor Tests', () => {
         expect(typeof window).toBe('object')
 
         const interceptor = createBrowserInterceptor({
-            enableRumIntegration: true
-            // ...
+
         })
         expect(typeof interceptor.stop).toBe('function')
 
