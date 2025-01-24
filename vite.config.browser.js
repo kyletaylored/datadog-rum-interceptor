@@ -1,8 +1,11 @@
-// vite.config.js
+// vite.config.browser.js
 import { defineConfig } from 'vite'
 import path from 'path'
 
 export default defineConfig({
+    resolve: {
+        conditions: [],
+    },
     build: {
         outDir: 'dist/browser',
         lib: {

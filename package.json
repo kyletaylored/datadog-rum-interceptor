@@ -7,6 +7,12 @@
     "type": "git",
     "url": "https://github.com/kyletaylored/datadog-rum-interceptor.git"
   },
+  "files": [
+    "src",
+    "dist",
+    "!.github/",
+    "!test/"
+  ],
   "main": "dist/node/datadog-rum-interceptor.node.cjs.js",
   "module": "dist/node/datadog-rum-interceptor.node.es.js",
   "browser": "dist/browser/datadog-rum-interceptor.browser.umd.js",
