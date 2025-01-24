@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kyletaylored/datadog-rum-interceptor.git"
+    "url": "git+https://github.com/kyletaylored/datadog-rum-interceptor.git"
   },
   "files": [
     "src",
