@@ -10,16 +10,13 @@ A lightweight library that intercepts **HTTP/HTTPS** (Node) or **fetch/XMLHttpRe
 ## Table of Contents
 
 1. [Features](#features)  
-2. [Installation](#installation)  
-3. [Project Structure](#project-structure)  
-4. [Building](#building)  
-5. [Usage](#usage)  
+1. [Installation](#installation)  
+1. [Usage](#usage)  
    - [Browser UMD](#browser-umd)  
    - [Browser ES Module](#browser-es-module)  
    - [Node (CommonJS/ESM)](#node-commonjsesm)  
-6. [Configuration Options](#configuration-options)  
-7. [Testing](#testing)  
-8. [License](#license)
+1. [Configuration Options](#configuration-options)  
+1. [License](#license)
 
 ---
 
@@ -39,88 +36,13 @@ A lightweight library that intercepts **HTTP/HTTPS** (Node) or **fetch/XMLHttpRe
 npm install @kyletaylored/datadog-rum-interceptor
 ```
 
-or
-
-```bash
-yarn add @kyletaylored/datadog-rum-interceptor
-```
-
 ---
 
-## 3. Project Structure
+## Usage
 
-Here’s a high-level view of how the **two-build** approach is organized:
+### Browser UMD
 
-```
-src/
-├─ baseInterceptor.js       # Shared logic (logs, RUM integration)
-├─ browserIndex.js          # Browser entry (FetchInterceptor + XHR)
-├─ nodeIndex.js             # Node entry (ClientRequestInterceptor + XHR)
-└─ ...                     # Other utility or type files
-
-dist/
-├─ browser/
-│   ├─ datadog-rum-interceptor.browser.es.js
-│   └─ datadog-rum-interceptor.browser.umd.js
-└─ node/
-    ├─ datadog-rum-interceptor.node.cjs.js
-    └─ datadog-rum-interceptor.node.es.js
-
-test/
-├─ browserInterceptor.test.js  # Jest + jsdom
-└─ nodeInterceptor.test.js     # Jest in Node env
-```
-
-- **`browserIndex.js`** imports only `FetchInterceptor` and `XMLHttpRequestInterceptor`.
-- **`nodeIndex.js`** imports `ClientRequestInterceptor` and `XMLHttpRequestInterceptor`.
-- **`baseInterceptor.js`** sets up the shared logging logic (`DD_LOGS`, `DD_RUM` detection, etc.) with a single function.
-
----
-
-## 4. Building
-
-We use **Vite** with **two config files**:
-
-- **`vite.config.browser.js`**: Builds the **browser** version into `dist/browser/`.  
-- **`vite.config.node.js`**: Builds the **Node** version into `dist/node/`.  
-
-**Scripts** in `package.json`:
-
-```jsonc
-{
-  "scripts": {
-    "build:browser": "vite build --config vite.config.browser.js",
-    "build:node": "vite build --config vite.config.node.js",
-    "build": "npm run build:browser && npm run build:node"
-  }
-}
-```
-
-Running:
-
-```bash
-npm run build
-```
-
-produces:
-
-```
-dist/
-├─ browser/
-│   ├─ datadog-rum-interceptor.browser.es.js
-│   └─ datadog-rum-interceptor.browser.umd.js
-└─ node/
-    ├─ datadog-rum-interceptor.node.cjs.js
-    └─ datadog-rum-interceptor.node.es.js
-```
-
----
-
-## 5. Usage
-
-### 5.1 Browser UMD
-
-If you load **`dist/browser/datadog-rum-interceptor.browser.umd.js`** directly in a `<script>` tag, it attaches itself to `window.DD_RUM_REQUEST` (assuming `name: 'DD_RUM_REQUEST'` in your Vite config).
+If you load **`datadog-rum-interceptor.browser.umd.js`** directly in a `<script>` tag, it attaches itself to `window.DD_RUM_REQUEST` (assuming `name: 'DD_RUM_REQUEST'` in your Vite config).
 
 ```html
 <script src="https://www.datadoghq-browser-agent.com/us1/v6/datadog-logs.js"></script>
@@ -132,7 +54,7 @@ If you load **`dist/browser/datadog-rum-interceptor.browser.umd.js`** directly i
   })
 </script>
 
-<script src="dist/browser/datadog-rum-interceptor.browser.umd.js"></script>
+<script src="https://www.unpkg.com/@kyletaylored/datadog-rum-interceptor@latest/dist/browser/datadog-rum-interceptor.browser.umd.js"></script>
 <script>
   // Now window.DD_RUM_REQUEST is available
   const interceptor = window.DD_RUM_REQUEST.createBrowserInterceptor({
@@ -144,12 +66,12 @@ If you load **`dist/browser/datadog-rum-interceptor.browser.umd.js`** directly i
 </script>
 ```
 
-### 5.2 Browser ES Module
+### Browser ES Module
 
-You can also import the **ES** build from `dist/browser/datadog-rum-interceptor.browser.es.js` in a modern environment or bundler:
+You can also import the **ES** build from `datadog-rum-interceptor.browser.es.js` in a modern environment or bundler:
 
 ```js
-import { createBrowserInterceptor } from './dist/browser/datadog-rum-interceptor.browser.es.js'
+import { createBrowserInterceptor } from './datadog-rum-interceptor.browser.es.js'
 
 const interceptor = createBrowserInterceptor({
   enableRumIntegration: true
@@ -158,13 +80,13 @@ const interceptor = createBrowserInterceptor({
 interceptor.stop()
 ```
 
-### 5.3 Node (CommonJS/ESM)
+### Node (CommonJS/ESM)
 
 If you’re using **Node** (CJS or ESM), import the build from `dist/node/`:
 
 - **CommonJS**:
   ```js
-  const { createNodeInterceptor } = require('@kyletaylored/datadog-rum-interceptor/dist/node/datadog-rum-interceptor.node.cjs.js')
+  const { createNodeInterceptor } = require('@kyletaylored/datadog-rum-interceptor')
   
   const interceptor = createNodeInterceptor()
   // ...
@@ -172,7 +94,7 @@ If you’re using **Node** (CJS or ESM), import the build from `dist/node/`:
   ```
 - **ESM**:
   ```js
-  import { createNodeInterceptor } from '@kyletaylored/datadog-rum-interceptor/dist/node/datadog-rum-interceptor.node.es.js'
+  import { createNodeInterceptor } from '@kyletaylored/datadog-rum-interceptor'
 
   const interceptor = createNodeInterceptor()
   // ...
@@ -183,7 +105,7 @@ If you’re using **Node** (CJS or ESM), import the build from `dist/node/`:
 
 ---
 
-## 6. Configuration Options
+## Configuration Options
 
 Both `createBrowserInterceptor` and `createNodeInterceptor` accept similar options:
 

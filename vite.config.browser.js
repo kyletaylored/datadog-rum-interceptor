@@ -1,11 +1,10 @@
 // vite.config.browser.js
 import { defineConfig } from 'vite'
 import path from 'path'
+import { nodeResolve } from '@rollup/plugin-node-resolve'
+import commonjs from '@rollup/plugin-commonjs'
 
 export default defineConfig({
-    resolve: {
-        conditions: [],
-    },
     build: {
         outDir: 'dist/browser',
         lib: {
@@ -15,11 +14,21 @@ export default defineConfig({
             formats: ['es', 'umd']
         },
         rollupOptions: {
-            external: ['@mswjs/interceptors'],
+            external: [], // Remove all external dependencies
+            plugins: [
+                nodeResolve({
+                    browser: true,
+                    mainFields: ['browser', 'module', 'main'],
+                    preferBuiltins: false
+                }),
+                commonjs({
+                    transformMixedEsModules: true
+                })
+            ],
             output: {
-                globals: {
-                    '@mswjs/interceptors': 'MSWInterceptors'
-                }
+                format: 'umd',
+                name: 'DD_RUM_REQUEST',
+                inlineDynamicImports: true
             }
         }
     }
