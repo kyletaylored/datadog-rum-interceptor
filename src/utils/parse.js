@@ -1,4 +1,4 @@
-// src/utils/parse.js
+const { logger } = require('./logger');
 
 /**
  * Attempt to parse a request/response body based on the Content-Type header.
@@ -32,7 +32,7 @@ export async function parseBody(body, contentType = '') {
             return JSON.parse(bodyText);
         } catch (err) {
             // Fallback: return raw text if JSON parse fails
-            console.warn('Failed to parse JSON:', err);
+            logger.warn('Failed to parse JSON:', err);
             return bodyText;
         }
     }
@@ -46,7 +46,7 @@ export async function parseBody(body, contentType = '') {
                 const xmlDoc = parser.parseFromString(bodyText, 'text/xml');
                 return xmlDoc;
             } catch (err) {
-                console.warn('Failed to parse XML:', err);
+                logger.warn('Failed to parse XML:', err);
                 return bodyText;
             }
         }

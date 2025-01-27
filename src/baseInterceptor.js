@@ -7,7 +7,7 @@ import { BatchInterceptor } from '@mswjs/interceptors';
 import { matchList, isMatchOption } from './utils/match';
 import { parseBody, applyMask } from './utils/parse';
 import { setLoggerDebug, logger } from './utils/logger';
-import { isNode, getDatadogLogs, getDatadogRum } from './utils/random';
+import { isNode, getDatadogLogs, getDatadogRum, statusCodeToMessage, getHeadersObject } from './utils/random';
 
 /**
  * @typedef {Object} InterceptorOptions
@@ -67,7 +67,6 @@ export function createBaseInterceptor(options, environmentInterceptors) {
     async function logToDatadog(request, response) {
         const url = request.url;
         const traceId = request.headers.get('x-datadog-trace-id') || null;
-        console.log(traceId);
 
         // Parse request and response bodies
         const parsedRequestBody = await parseBody(request.body, request.headers.get('Content-Type') || '');
@@ -121,7 +120,7 @@ export function createBaseInterceptor(options, environmentInterceptors) {
 
         // Log to Datadog Logs if available
         if (ddLogs?.logger) {
-            ddLogs.logger.info('HTTP Intercepted Request/Response', {
+            const logBody = {
                 request: {
                     method: request.method,
                     url: url,
@@ -132,13 +131,19 @@ export function createBaseInterceptor(options, environmentInterceptors) {
                     status: response.status,
                     headers: Object.fromEntries(response.headers.entries()),
                     body: modifiedResponseBody
-                },
-                tags: {
-                    traceId: traceId,
-                    service: service,
-                    env: env,
                 }
-            });
+            };
+            logger.log("log body", logBody);
+
+            // Log data.
+            ddLogs.logger.log(logBody,
+                {
+                    dd: {
+                        trace_id: traceId,
+                    }
+                },
+                statusCodeToMessage(response.status)
+            );
         } else {
             logger.warn("Datadog Logs logger is not available. Skipping log.");
         }
@@ -148,6 +153,7 @@ export function createBaseInterceptor(options, environmentInterceptors) {
      * Listen for response events and log them
      */
     interceptor.on('response', async ({ response, request }) => {
+
         // Early evaluation: Check if the URL should be excluded
         const isExcluded = matchList(combinedExcludeUrls, request.url);
         if (isExcluded) {
@@ -161,7 +167,6 @@ export function createBaseInterceptor(options, environmentInterceptors) {
         if (rumInstance && typeof rumInstance.getInitConfiguration === 'function') {
             const rumConfig = rumInstance.getInitConfiguration();
             allowedTracingUrls = rumConfig?.allowedTracingUrls || [];
-            logger.log("Retrieved allowedTracingUrls from RUM configuration:", allowedTracingUrls);
         } else {
             logger.warn('Datadog RUM is not initialized or getInitConfiguration is unavailable.');
         }
@@ -172,8 +177,6 @@ export function createBaseInterceptor(options, environmentInterceptors) {
             logger.info('URL not allowed for tracing:', request.url);
             return; // Skip processing
         }
-
-        logger.log("Processing response for URL:", request.url);
 
         // Clone request and response to safely read their bodies
         const clonedRequest = await request.clone();

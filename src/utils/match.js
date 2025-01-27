@@ -28,7 +28,6 @@ function isMatchOption(item) {
  * the option, instead of requiring an exact match.
  */
 function matchList(list, value, useStartsWith = false) {
-    logger.log({ list, value, useStartsWith });
     return list.some((item) => {
         try {
             if (typeof item === 'function') {
