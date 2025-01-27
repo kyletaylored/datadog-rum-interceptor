@@ -10,7 +10,7 @@ export default defineConfig({
         outDir: 'dist/node',
         lib: {
             entry: path.resolve(__dirname, 'src/nodeIndex.js'),
-            name: 'DD_RUM_REQUEST_NODE',
+            name: 'DD_RUM_INTERCEPTOR_NODE',
             formats: ['cjs', 'es'],
             fileName: (format) => `datadog-rum-interceptor.node.${format}.js`,
         },

@@ -6,10 +6,11 @@ import commonjs from '@rollup/plugin-commonjs'
 
 export default defineConfig({
     build: {
+        // minify: false,
         outDir: 'dist/browser',
         lib: {
             entry: path.resolve(__dirname, 'src/browserIndex.js'),
-            name: 'DD_RUM_REQUEST', // Global name for UMD
+            name: 'DD_RUM_INTERCEPTOR', // Global name for UMD
             fileName: (format) => `datadog-rum-interceptor.browser.${format}.js`,
             formats: ['es', 'umd']
         },
@@ -36,7 +37,7 @@ export default defineConfig({
                     '@datadog/browser-logs': 'datadogLogs'
                 },
                 format: 'umd',
-                name: 'DD_RUM_REQUEST',
+                name: 'DD_RUM_INTERCEPTOR',
                 inlineDynamicImports: true
             }
         }

@@ -1,3 +1,5 @@
+// src/utils/parse.js
+
 /**
  * Attempt to parse a request/response body based on the Content-Type header.
  * @param {ReadableStream | string | Buffer | null} body - The raw body.
@@ -5,33 +7,33 @@
  * @returns {Promise<unknown>} Returns a parsed object/string/DOM/etc. if possible
  */
 export async function parseBody(body, contentType = '') {
-    if (!body) return null
+    if (!body) return null;
 
-    let bodyText = ''
+    let bodyText = '';
 
-    // 1. Convert body to text if it's a ReadableStream (browser fetch scenario):
+    // 1. Convert body to text based on its type
     if (typeof body === 'string') {
-        bodyText = body
+        bodyText = body;
     } else if (body instanceof ReadableStream) {
-        bodyText = await new Response(body).text()
+        bodyText = await new Response(body).text();
     }
-    // Node scenario? Possibly a Buffer or other type:
-    // else if (Buffer.isBuffer(body)) {
-    //   bodyText = body.toString('utf-8')
-    // }
-    // ... additional checks as needed.
+    // Node scenario: Buffer
+    else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(body)) {
+        bodyText = body.toString('utf-8');
+    }
+    // Add more checks as needed for other environments or types
 
-    // 2. Check Content-Type to decide how to parse:
-    const lowerCT = contentType.toLowerCase()
+    // 2. Determine parsing strategy based on Content-Type
+    const lowerCT = contentType.toLowerCase();
 
     // - JSON
     if (lowerCT.includes('json')) {
         try {
-            return JSON.parse(bodyText)
+            return JSON.parse(bodyText);
         } catch (err) {
             // Fallback: return raw text if JSON parse fails
-            console.warn('Failed to parse JSON:', err)
-            return bodyText
+            console.warn('Failed to parse JSON:', err);
+            return bodyText;
         }
     }
 
@@ -40,21 +42,42 @@ export async function parseBody(body, contentType = '') {
         // Parse as XML/HTML via DOMParser in the browser:
         if (typeof window !== 'undefined' && window.DOMParser) {
             try {
-                const parser = new window.DOMParser()
-                const xmlDoc = parser.parseFromString(bodyText, 'text/xml')
-                return xmlDoc
+                const parser = new window.DOMParser();
+                const xmlDoc = parser.parseFromString(bodyText, 'text/xml');
+                return xmlDoc;
             } catch (err) {
-                console.warn('Failed to parse XML:', err)
-                return bodyText
+                console.warn('Failed to parse XML:', err);
+                return bodyText;
             }
         }
-        // Otherwise, fallback
-        return bodyText
+        // Node.js: Use DOMParser alternative or return raw text
+        // For simplicity, return raw text
+        return bodyText;
     }
 
-    // - other known content types can go here: 
-    //   e.g. "text/html", "application/x-www-form-urlencoded", etc.
+    // - Add more content types as needed:
+    //   e.g., "text/html", "application/x-www-form-urlencoded", etc.
 
     // Default fallback: plain text
-    return bodyText
+    return bodyText;
+}
+
+/**
+ * Mask sensitive fields in the body based on the `mask` configuration.
+ *
+ * @param {any} body - The request or response body.
+ * @param {Array<string>} mask - The list of fields to mask.
+ * @returns {any} - The masked body.
+ */
+export function applyMask(body, mask) {
+    if (typeof body === 'object' && body !== null) {
+        const copy = Array.isArray(body) ? [...body] : { ...body };
+        mask.forEach((field) => {
+            if (copy.hasOwnProperty(field)) {
+                copy[field] = '***REDACTED***';
+            }
+        });
+        return copy;
+    }
+    return body;
 }
