@@ -1,6 +1,7 @@
 {
   "name": "@kyletaylored/datadog-rum-interceptor",
-  "version": "0.0.6",
+  "description": "A lightweight request/response interceptor to provide payload visibility for debugging and monitoring.",
+  "version": "0.0.7",
   "author": "Kyle Taylor <kyle.taylor@datadoghq.com>",
   "license": "MIT",
   "type": "module",
@@ -14,25 +15,21 @@
     "!.github/",
     "!test/"
   ],
-  "main": "dist/node/datadog-rum-interceptor.node.cjs.js",
-  "module": "dist/node/datadog-rum-interceptor.node.es.js",
-  "browser": "dist/browser/datadog-rum-interceptor.browser.umd.js",
   "exports": {
     ".": {
       "node": {
-        "import": "./dist/node/datadog-rum-interceptor.node.es.js",
-        "require": "./dist/node/datadog-rum-interceptor.node.cjs.js"
+        "import": "./dist/es/main.js",
+        "require": "./dist/cjs/main.js"
       },
-      "browser": "./dist/browser/datadog-rum-interceptor.browser.umd.js",
-      "default": "./dist/node/datadog-rum-interceptor.node.es.js"
+      "browser": "./dist/umd/main.js",
+      "default": "./dist/es/main.js"
     }
   },
   "scripts": {
-    "build:browser": "vite build --config vite.config.browser.js",
-    "build:node": "vite build --config vite.config.node.js",
-    "build": "npm run build:browser && npm run build:node",
+    "build": "vite build",
     "prepare": "npm run build",
-    "start": "npm run build && cp ./dist/browser/*.js /Users/kyle.taylor/server/demo/datadog-demo-app/frontend/public/"
+    "start": "vite build --watch --mode development",
+    "help": "vite --help"
   },
   "keywords": [
     "interceptor",
@@ -45,10 +42,7 @@
     "@mswjs/interceptors": "^0.37.5"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.2",
-    "@rollup/plugin-node-resolve": "^16",
-    "vite": "^6",
-    "vite-plugin-node-polyfills": "^0.23.0"
+    "vite": "^6"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.32.1"

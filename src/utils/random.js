@@ -1,4 +1,4 @@
-const { logger } = require('./logger');
+import { logger } from './logger';
 
 /**
  * Get headers from request or response object.
@@ -119,7 +119,6 @@ export async function parseBody(body) {
         }
 
         const trimmedBody = bodyText.trim();
-        return trimmedBody;
 
         // Try parsing as JSON first
         if (trimmedBody.startsWith('{') || trimmedBody.startsWith('[')) {
@@ -130,6 +129,8 @@ export async function parseBody(body) {
                 return bodyText; // Return raw text if JSON parsing fails
             }
         }
+
+        return trimmedBody;
 
         // Try parsing as XML if it starts with < and isn't HTML
         if (trimmedBody.startsWith('<')) {

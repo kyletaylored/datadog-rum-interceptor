@@ -2,8 +2,9 @@
  * @file storage.js
  * @description In-memory storage for intercepted requests and responses.
  */
-const { logger } = require('./logger');
-const { simpleHash, hashJsonObject } = require('./random');
+
+import { logger } from './logger';
+import { simpleHash, hashJsonObject } from './random';
 
 const interceptedRequests = new Map(); // Temporary storage for requests (keyed by requestId)
 const interceptedResponses = new Map(); // Stores final responses
