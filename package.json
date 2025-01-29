@@ -1,6 +1,6 @@
 {
   "name": "@kyletaylored/datadog-rum-interceptor",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "author": "Kyle Taylor <kyle.taylor@datadoghq.com>",
   "license": "MIT",
   "type": "module",

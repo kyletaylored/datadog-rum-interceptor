@@ -2,15 +2,13 @@ const { logger } = require('./logger');
 
 /**
  * Get headers from request or response object.
- * @param {*} fetchObj 
+ * @param {Headers} headers 
  * @returns 
  */
-export function getHeadersObject(fetchObj) {
-    if (!(fetchObj instanceof Request || fetchObj instanceof Response)) {
-        throw new Error('The object provided must be an instance of Request or Response.');
+export function getHeaders(headers) {
+    if (!(headers instanceof Headers)) {
+        throw new Error('The object provided must be an instance of Headers.');
     }
-
-    const headers = fetchObj.headers;
     const headersObject = {};
 
     for (const [key, value] of headers.entries()) {
@@ -33,6 +31,21 @@ export function filterResource(resource) {
 }
 
 /**
+ * Creates a simple hash.
+ * @param {string} str Input string
+ * @returns {string} A simple hash of the string
+ */
+export function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(16).padStart(32, '0');
+}
+
+/**
  * Get the Datadog trace ID from the context headers. (fetch only)
  * @param {Object} context - The context object that may contain request headers
  * @returns {string|null} The Datadog trace ID if found, null otherwise
@@ -48,10 +61,10 @@ export function getTraceId(context) {
             return null;
         }
 
-        const traceIdPair = context.requestInit.headers.find(pair => 
+        const traceIdPair = context.requestInit.headers.find(pair =>
             Array.isArray(pair) && pair[0] === "x-datadog-trace-id"
         );
-        
+
         return traceIdPair ? traceIdPair[1] : null;
     } catch (error) {
         logger.error('Error getting trace ID:', error);
@@ -67,11 +80,9 @@ export function getTraceId(context) {
 export async function buildDataObject(object) {
     const clonedObject = await object.clone();
 
-    logger.log(clonedObject);
-
     return {
         method: 'method' in clonedObject ? clonedObject.method : null, // Only Requests have a method
-        headers: getHeadersObject(clonedObject),
+        headers: getHeaders(clonedObject.headers),
         body: await parseBody(clonedObject.body),
         url: clonedObject.url,
         status: 'status' in clonedObject ? clonedObject.status : null, // Only Responses have a status
@@ -89,9 +100,9 @@ export async function parseBody(body) {
     if (!body) return null;
 
     // Determine if we're in Node.js environment
-    const isNode = typeof process !== 'undefined' && 
-                   process.versions != null && 
-                   process.versions.node != null;
+    const isNode = typeof process !== 'undefined' &&
+        process.versions != null &&
+        process.versions.node != null;
 
     let bodyText;
     try {
@@ -108,6 +119,7 @@ export async function parseBody(body) {
         }
 
         const trimmedBody = bodyText.trim();
+        return trimmedBody;
 
         // Try parsing as JSON first
         if (trimmedBody.startsWith('{') || trimmedBody.startsWith('[')) {
@@ -131,25 +143,25 @@ export async function parseBody(body) {
                         const dom = new JSDOM();
                         const parser = new dom.window.DOMParser();
                         const xmlDoc = parser.parseFromString(trimmedBody, 'text/xml');
-                        
+
                         // Check for parsing errors
                         const parseError = xmlDoc.querySelector('parsererror');
                         if (parseError) {
                             throw new Error(parseError.textContent);
                         }
-                        
+
                         return xmlDoc;
                     } else {
                         // In browser, use native DOMParser
                         const parser = new DOMParser();
                         const xmlDoc = parser.parseFromString(trimmedBody, 'text/xml');
-                        
+
                         // Check for parsing errors
                         const parseError = xmlDoc.querySelector('parsererror');
                         if (parseError) {
                             throw new Error(parseError.textContent);
                         }
-                        
+
                         return xmlDoc;
                     }
                 } catch (err) {
@@ -166,4 +178,59 @@ export async function parseBody(body) {
         logger.error('Error parsing body:', err);
         return null;
     }
+}
+
+/**
+ * Converts an XHR response header string into a Headers object.
+ * @param {string} rawHeaders - The raw header string from `getAllResponseHeaders()`.
+ * @returns {Headers} A Headers object containing the parsed headers.
+ */
+export function getXhrHeaders(rawHeaders) {
+    const headers = new Headers();
+
+    if (!rawHeaders) return headers;
+
+    // Split headers by new lines
+    rawHeaders.trim().split(/[\r\n]+/).forEach((line) => {
+        const parts = line.split(": ");
+        const name = parts.shift().trim();
+        const value = parts.join(": ").trim();
+
+        if (name) {
+            headers.append(name, value);
+        }
+    });
+
+    return headers;
+}
+
+/**
+ * Generates a hash for a JSON object using the `simpleHash` function.
+ * Ensures a consistent order by sorting object keys.
+ * @param {Object} obj - The JSON object to hash.
+ * @returns {string} A 32-character hexadecimal hash.
+ */
+export function hashJsonObject(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+
+    // Recursively sort the object keys
+    function sortObject(o) {
+        if (Array.isArray(o)) {
+            return o.map(sortObject); // Sort each item in an array
+        } else if (o !== null && typeof o === 'object') {
+            return Object.keys(o)
+                .sort()
+                .reduce((acc, key) => {
+                    acc[key] = sortObject(o[key]); // Recursively sort nested objects
+                    return acc;
+                }, {});
+        }
+        return o; // Return primitive values as-is
+    }
+
+    // Convert the sorted object to a JSON string
+    const jsonString = JSON.stringify(sortObject(obj));
+
+    // Generate hash using the available simpleHash function
+    return simpleHash(jsonString);
 }

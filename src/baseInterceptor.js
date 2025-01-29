@@ -1,7 +1,7 @@
 import { BatchInterceptor } from '@mswjs/interceptors';
 import { setLoggerDebug, logger } from './utils/logger';
 import { storeInterceptedData, getInterceptedData, storeTemporaryRequest, getAndRemoveTemporaryRequest, generateResponseFingerprint } from './utils/storage';
-import { getTraceId, buildDataObject, filterResource } from './utils/random';
+import { getTraceId, buildDataObject, filterResource, getXhrHeaders, getHeaders } from './utils/random';
 
 /**
  * Base function that sets up request and response interception.
@@ -54,8 +54,6 @@ export function createBaseInterceptor(options, environmentInterceptors) {
 
         // Retrieve the stored request using requestId
         const requestData = getAndRemoveTemporaryRequest(requestId);
-        logger.log({requestData})
-
         if (!requestData) {
             logger.warn(`No matching request found for response: ${response.url}`);
             return;
@@ -91,12 +89,16 @@ export function createBaseInterceptor(options, environmentInterceptors) {
             return null;
         }
 
+        // Extract the event and context from the beforeSend object.
         const { event, context } = beforeSend;
-
         if (!event || !context) {
             console.warn('Both `event` and `context` are required.');
             return null;
         }
+
+        // Check if XHR or Fetch event
+        const isXHR = event.resource?.type === 'xhr';
+        const headers = !isXHR ? context.response.headers : getXhrHeaders(context.xhr.getAllResponseHeaders());
 
         try {
             // Get the trace ID from the context headers or generate a fingerprint.
@@ -105,20 +107,18 @@ export function createBaseInterceptor(options, environmentInterceptors) {
                 url: event.resource?.url || "",
                 status: event.resource?.status_code || "",
                 timestamp: event.date || Date.now(),
+                headers: getHeaders(headers),
             }, 'extractor');
 
             // Retrieve the stored data using the trace ID or fingerprint.
-            const responseData = getInterceptedData(id);
+            const data = getInterceptedData(id);
 
             // Log a warning if no match is found.
-            if (!responseData) {
+            if (!data) {
                 logger.warn('No match found for request:', context);
             }
 
-            // Add resource type for clarity.
-            responseData.type = event.resource.type = 'resource';
-
-            return responseData;
+            return data;
         } catch (err) {
             logger.error('Failed to extract resource data:', err);
             return null;

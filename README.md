@@ -21,7 +21,7 @@ npm install datadog-rum-interceptor
 or via CDN:
 
 ```html
-<script src="https://cdn.example.com/datadog-rum-interceptor.js"></script>
+<script src="https://www.unpkg.com/@kyletaylored/datadog-rum-interceptor@latest/dist/browser/datadog-rum-interceptor.browser.umd.js"></script>
 ```
 
 ---

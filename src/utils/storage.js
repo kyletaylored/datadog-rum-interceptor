@@ -3,6 +3,7 @@
  * @description In-memory storage for intercepted requests and responses.
  */
 const { logger } = require('./logger');
+const { simpleHash, hashJsonObject } = require('./random');
 
 const interceptedRequests = new Map(); // Temporary storage for requests (keyed by requestId)
 const interceptedResponses = new Map(); // Stores final responses
@@ -54,41 +55,27 @@ export function getInterceptedData(id) {
 }
 
 /**
- * Creates a simple hash.
- * @param {string} str Input string
- * @returns {string} A simple hash of the string
- */
-function simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(32, '0');
-}
-
-/**
  * Generates a fingerprint for response matching.
- * @param {Object} responseData - Response data (method, URL, status, timestamp).
+ * @param {Object} data - Response data (method, URL, status, timestamp).
  * @param {string} context - An optional context for logging.
  * @returns {Promise<string|null>} A fingerprint ID.
  */
-export function generateResponseFingerprint(responseData, context = 'default') {
-    if (!responseData) return null;
+export function generateResponseFingerprint(data, context = 'default') {
+    if (!data) return null;
 
     try {
-        const method = responseData.method || 'GET';
-        const url = responseData.url || '';
-        const status = responseData.status || 200;
-        const timestamp = Math.floor(responseData.timestamp / 1000); // Round to seconds
+        const method = data.method || 'GET';
+        const url = data.url || '';
+        const status = data.status || 200;
+        const timestamp = Math.floor(data.timestamp / 10000); // Round to 10 seconds
+        const headers = hashJsonObject(data.headers) || '';
 
         // Generate a stable fingerprint hash
-        const fingerprintString = `${method}:${url}:${status}:${timestamp}`;
-        
+        const fingerprintString = `${method}:${url}:${status}:${headers}:${timestamp}`;
+
         // Fallback to simple hash if neither is available
         const fingerprint = simpleHash(fingerprintString);
-        logger.log(`Debug fingerprint (${context}):`, {responseData, fingerprintString, fingerprint});
+        logger.log(`Debug fingerprint (${context}):`, { data, fingerprintString, fingerprint });
         return fingerprint;
 
     } catch (error) {
