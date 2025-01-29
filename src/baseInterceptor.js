@@ -8,7 +8,7 @@ import { getTraceId, buildDataObject, filterResource } from './utils/random';
  *
  * @param {Object} options - Configuration options.
  * @param {import('@mswjs/interceptors').Interceptor[]} environmentInterceptors
- * @returns {{ stop: () => void, extractResourceData: (context: object) => object }}
+ * @returns {{ stop: () => void, getPayload: (context: object) => object }}
  */
 export function createBaseInterceptor(options, environmentInterceptors) {
     const { debug = false } = options || {};
@@ -132,6 +132,6 @@ export function createBaseInterceptor(options, environmentInterceptors) {
 
     return {
         stop,
-        extractResourceData,
+        getPayload,
     };
 }
