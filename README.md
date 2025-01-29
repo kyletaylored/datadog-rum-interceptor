@@ -1,367 +1,168 @@
-# Datadog RUM Interceptor
+# **Datadog RUM Interceptor**
 
-**Datadog RUM Interceptor** is a lightweight library designed to intercept HTTP/HTTPS or Fetch/XHR requests, inject the `x-datadog-trace-id` header, and log request/response payloads to Datadog RUM and Logs with data masking capabilities.
+**A lightweight request/response interceptor for Datadog RUM, providing enhanced payload visibility for debugging and monitoring.**
 
-## Overview
+## **Features**
 
-- **Trace ID Injection**: Automatically injects `x-datadog-trace-id` into eligible requests.
-- **Payload Logging**: Logs intercepted requests and responses to Datadog Logs.
-- **Data Masking**: Masks sensitive fields in request and response bodies to protect information.
-- **Flexible Configuration**: Allows exclusion of specific URLs and custom processing before logging.
-
-## Installation
-
-Install the interceptor along with the required peer dependencies using npm or Yarn:
-
-```bash
-npm install @kyletaylored/datadog-rum-interceptor @datadog/browser-core @datadog/browser-rum @datadog/browser-logs
-```
-
-or
-
-```bash
-yarn add @kyletaylored/datadog-rum-interceptor @datadog/browser-core @datadog/browser-rum @datadog/browser-logs
-```
-
-## Usage
-
-### Browser Integration
-
-1. **Include Datadog RUM and Logs Scripts**
-
-   Ensure that the Datadog RUM and Logs scripts are loaded in your HTML **before** the interceptor script:
-
-   ```html
-   <!DOCTYPE html>
-   <html>
-   <head>
-       <title>Datadog RUM + Interceptor Example</title>
-       <!-- Load Datadog Logs Library -->
-       <script>
-           (function(h,o,u,n,d) {
-               h=h[d]=h[d]||{q:[],onReady:function(c){h.q.push(c)}}
-               d=o.createElement(u);d.async=1;d.src=n
-               n=o.getElementsByTagName(u)[0];n.parentNode.insertBefore(d,n)
-           })(window,document,'script','https://www.datadoghq-browser-agent.com/us1/v6/datadog-logs.js','DD_LOGS');
-
-           window.DD_LOGS.onReady(function() {
-               window.DD_LOGS.init({
-                   clientToken: 'YOUR_DATADOG_CLIENT_TOKEN',
-                   site: 'datadoghq.com',
-                   forwardErrorsToLogs: true,
-                   sessionSampleRate: 100,
-                   // ...other configurations
-               });
-           });
-       </script>
-       <!-- Load Datadog RUM Library -->
-       <script>
-           (function(h,o,u,n,d) {
-               h=h[d]=h[d]||{q:[],onReady:function(c){h.q.push(c)}}
-               d=o.createElement(u);d.async=1;d.src=n
-               n=o.getElementsByTagName(u)[0];n.parentNode.insertBefore(d,n)
-           })(window,document,'script','https://www.datadoghq-browser-agent.com/us1/v4/datadog-rum.js','DD_RUM');
-
-           window.DD_RUM.onReady(function() {
-               window.DD_RUM.init({
-                   clientToken: 'YOUR_DATADOG_CLIENT_TOKEN',
-                   applicationId: 'YOUR_APPLICATION_ID',
-                   site: 'datadoghq.com',
-                   allowedTracingUrls: [
-                       "https://api.example.com",
-                       /https:\/\/.*\.my-api-domain\.com/,
-                       (url) => url.startsWith("https://api.example.com")
-                   ],
-                   // ...other configurations
-               });
-           });
-       </script>
-   </head>
-   <body>
-       <!-- Your application content -->
-
-       <!-- Load the interceptor script -->
-       <script src="dist/browser/datadog-rum-interceptor.browser.umd.js"></script>
-       <script>
-           // Initialize the interceptor once RUM and Logs are ready
-           DD_RUM_INTERCEPTOR.init({
-               excludeUrls: [
-                   /^https:\/\/private\.example\.com/,
-                   (url) => url.includes('exclude-this-path')
-               ],
-               mask: ['password', 'token'],
-               /**
-                * beforeLog Callback
-                * 
-                * Note: This callback only receives and allows modification of the `body` of the request and response.
-                */
-               beforeLog: (requestBody, responseBody) => {
-                   if (requestBody && requestBody.user) {
-                       requestBody.user = 'anonymous';
-                   }
-                   if (responseBody && responseBody.sensitiveInfo) {
-                       responseBody.sensitiveInfo = 'redacted';
-                   }
-                   return { requestBody, responseBody };
-               }
-           }, 100, 5000); // Optional: pollInterval=100ms, maxWait=5000ms
-       </script>
-   </body>
-   </html>
-   ```
-
-### Node.js Integration
-
-1. **Import and Initialize**
-
-   ```javascript
-   // Import required modules
-   const { datadogLogs } = require('@datadog/browser-logs');
-   const { datadogRum } = require('@datadog/browser-rum');
-   const { initNodeInterceptor } = require('@kyletaylored/datadog-rum-interceptor');
-   const { FetchInterceptor } = require('@mswjs/interceptors/fetch');
-   const { XMLHttpRequestInterceptor } = require('@mswjs/interceptors/XMLHttpRequest');
-
-   // Initialize Datadog Logs
-   datadogLogs.init({
-       clientToken: 'YOUR_DATADOG_CLIENT_TOKEN',
-       site: 'datadoghq.com',
-       forwardErrorsToLogs: true,
-       sessionSampleRate: 100,
-       // ...other configurations
-   });
-
-   // Initialize Datadog RUM
-   datadogRum.init({
-       clientToken: 'YOUR_DATADOG_CLIENT_TOKEN',
-       applicationId: 'YOUR_APPLICATION_ID',
-       site: 'datadoghq.com',
-       allowedTracingUrls: [
-           "https://api.example.com",
-           /https:\/\/.*\.my-api-domain\.com/,
-           (url) => url.startsWith("https://api.example.com")
-       ],
-       // ...other configurations
-   });
-
-   // Initialize the interceptor once RUM is ready
-   datadogRum.onReady(() => {
-       const environmentInterceptors = [
-           new FetchInterceptor(),
-           new XMLHttpRequestInterceptor()
-       ];
-
-       const interceptor = initNodeInterceptor({
-           excludeUrls: [
-               /^https:\/\/private\.example\.com/,
-               (url) => url.includes('exclude-this-path')
-           ],
-           mask: ['password', 'token'],
-           /**
-            * beforeLog Callback
-            * 
-            * Note: This callback only receives and allows modification of the `body` of the request and response.
-            */
-           beforeLog: (requestBody, responseBody) => {
-               if (requestBody && requestBody.user) {
-                   requestBody.user = 'anonymous';
-               }
-               if (responseBody && responseBody.sensitiveInfo) {
-                   responseBody.sensitiveInfo = 'redacted';
-               }
-               return { requestBody, responseBody };
-           },
-           debug: true // Optional: Enable debug logging
-       }, environmentInterceptors);
-   });
-   ```
-
-## Configuration Options
-
-- **`excludeUrls`** *(Array)*:  
-  URLs or paths to exclude from trace ID injection and logging. Supports strings, regular expressions, or callback functions.
-
-  ```javascript
-  excludeUrls: [
-      /^https:\/\/private\.example\.com/,
-      (url) => url.includes('exclude-this-path')
-  ],
-  ```
-
-- **`mask`** *(Array)*:  
-  Fields in the request/response bodies that should be masked to protect sensitive data.
-
-  ```javascript
-  mask: ['password', 'token']
-  ```
-
-- **`beforeLog`** *(Function)*:  
-  A callback function that receives only the `body` of the request and response objects before logging, allowing for custom processing or modification.
-
-  **Important:** The `beforeLog` callback **only** receives and can modify the `body` of the request and response. It **cannot** modify headers or other properties.
-
-  ```javascript
-  beforeLog: (requestBody, responseBody) => {
-      if (requestBody && requestBody.user) {
-          requestBody.user = 'anonymous';
-      }
-      if (responseBody && responseBody.sensitiveInfo) {
-          responseBody.sensitiveInfo = 'redacted';
-      }
-      return { requestBody, responseBody };
-  },
-  ```
-
-- **`pollInterval`** *(number)*:  
-  Interval in milliseconds between readiness checks (Browser only). Default is `100ms`.
-
-- **`maxWait`** *(number)*:  
-  Maximum time in milliseconds to wait for readiness before bailing out (Browser only). Default is `5000ms` or `5 seconds`.
-
-- **`debug`** *(Boolean)*:  
-  Enable debugging for log outputs. Useful for development and troubleshooting.
-
-  ```javascript
-  debug: true
-  ```
-
-## Example Scenarios
-
-### Injecting Trace ID and Logging with Masking
-
-**Browser Example:**
-
-```html
-<script>
-    window.DD_RUM && window.DD_RUM.onReady(function() {
-        const interceptor = DD_RUM_INTERCEPTOR.init({
-            excludeUrls: [
-                /^https:\/\/private\.example\.com/,
-                (url) => url.includes('exclude-this-path')
-            ],
-            mask: ['password', 'token'],
-            /**
-             * beforeLog Callback
-             * 
-             * Note: This callback only receives and allows modification of the `body` of the request and response.
-             */
-            beforeLog: (requestBody, responseBody) => {
-                if (requestBody && requestBody.user) {
-                    requestBody.user = 'anonymous';
-                }
-                if (responseBody && responseBody.sensitiveInfo) {
-                    responseBody.sensitiveInfo = 'redacted';
-                }
-                return { requestBody, responseBody };
-            }
-        }, 100, 5000); // Optional: pollInterval=100ms, maxWait=5000ms
-    });
-</script>
-```
-
-**Node.js Example:**
-
-```javascript
-datadogRum.onReady(() => {
-    const environmentInterceptors = [
-        new FetchInterceptor(),
-        new XMLHttpRequestInterceptor()
-    ];
-
-    const interceptor = initNodeInterceptor({
-        excludeUrls: [
-            /^https:\/\/private\.example\.com/,
-            (url) => url.includes('exclude-this-path')
-        ],
-        mask: ['password', 'token'],
-        /**
-         * beforeLog Callback
-         * 
-         * Note: This callback only receives and allows modification of the `body` of the request and response.
-         */
-        beforeLog: (requestBody, responseBody) => {
-            if (requestBody && requestBody.user) {
-                requestBody.user = 'anonymous';
-            }
-            if (responseBody && responseBody.sensitiveInfo) {
-                responseBody.sensitiveInfo = 'redacted';
-            }
-            return { requestBody, responseBody };
-        },
-        debug: true // Optional: Enable debug logging
-    }, environmentInterceptors);
-});
-```
-
-## Quick Tips
-
-- **Ensure Proper Initialization Order:**  
-  - **Browser:** Initialize the interceptor within the `DD_RUM.onReady` callback.
-  - **Node.js:** Initialize Logs first, then RUM, and finally the interceptor.
-
-- **Customize Masking:**  
-  Update the `mask` array with all sensitive fields relevant to your application to ensure data privacy.
-
-- **Dynamic Exclusions:**  
-  Utilize callback functions in `excludeUrls` for more complex URL exclusion logic.
-
-- **Understand `beforeLog` Limitations:**  
-  The `beforeLog` callback **only** receives the `body` of the request and response objects. It **cannot** modify headers or other properties. Ensure that any modifications are confined to the `body` to maintain the integrity of the original requests and responses.
-
-## Support
-
-For issues or feature requests, please [open an issue](https://github.com/kyletaylored/datadog-rum-interceptor/issues) on the repository.
+- Intercepts Fetch & XHR requests
+- Captures request & response payloads
+- Seamlessly integrates with Datadog RUM
+- Uses Trace ID if available, falls back to fingerprinting
+- Automatically evicts unmatched requests after 5 seconds
 
 ---
 
-### **Additional Notes**
+## **Installation**
 
-#### Understanding the `beforeLog` Callback
+```bash
+npm install datadog-rum-interceptor
+```
 
-The `beforeLog` callback is a powerful feature that allows you to customize the data being logged to Datadog. However, it's important to understand its limitations to use it effectively:
+or via CDN:
 
-- **Scope of Modification:**  
-  The `beforeLog` callback **only** receives the `body` of the request and response. This means you can modify, redact, or enhance the body content but **cannot** alter headers or other properties.
+```html
+<script src="https://cdn.example.com/datadog-rum-interceptor.js"></script>
+```
 
-- **Function Signature:**  
-  ```javascript
-  beforeLog: (requestBody, responseBody) => {
-      // Modify requestBody and/or responseBody as needed
-      return { requestBody, responseBody };
+---
+
+## **Quick Start**
+
+### **1. Initialize the Interceptor**
+
+Add the interceptor **before** initializing Datadog RUM:
+
+```javascript
+const DRI = window.DD_RUM_INTERCEPTOR.init({
+  debug: true, // Enable debugging logs (optional)
+});
+```
+
+---
+
+### **2. Integrate with Datadog RUM**
+
+Use the **beforeSend** callback to attach intercepted data:
+
+```javascript
+window.DD_RUM.init({
+  applicationId: "YOUR_APP_ID",
+  clientToken: "YOUR_CLIENT_TOKEN",
+  site: "datadoghq.com",
+  service: "your-service",
+  sessionSampleRate: 100,
+  beforeSend: (event, context) => {
+    if (event.type === "resource") {
+      console.log(`Intercepted ${event.resource.type} request...`);
+
+      // Automatically retrieve the payload
+      const payload = DRI.getPayload({ event, context });
+      if (payload) {
+        event.context.payload = payload;
+      }
+    }
+    return true;
   },
-  ```
+});
+```
 
-- **Example Use Cases:**
-  - **Redacting Sensitive Information:**
-    ```javascript
-    beforeLog: (requestBody, responseBody) => {
-        if (requestBody && requestBody.password) {
-            requestBody.password = '***REDACTED***';
-        }
-        return { requestBody, responseBody };
+---
+
+## **How It Works**
+
+1. **Intercepts HTTP requests**
+   - Uses `@mswjs/interceptors` to listen for **Fetch & XHR requests**.
+2. **Links Requests & Responses**
+   - If **Trace ID exists**, it’s used for tracking.
+   - If **Trace ID is missing**, a **fingerprint (method, URL, status, timestamp)** is generated.
+3. **Stores data temporarily**
+   - **Request data is stored using `requestId`** until the response is received.
+   - **Unmatched requests are automatically evicted after 5 seconds**.
+4. **Retrieves payload in `beforeSend`**
+   - The `getPayload({ event, context })` method **automatically** finds and attaches the payload.
+
+---
+
+## **Example Output**
+
+Captured request & response payload structure:
+
+```json
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.example.com/data",
+    "headers": {
+      "content-type": "application/json"
     },
-    ```
-  
-  - **Anonymizing User Data:**
-    ```javascript
-    beforeLog: (requestBody, responseBody) => {
-        if (requestBody && requestBody.user) {
-            requestBody.user = 'anonymous';
-        }
-        return { requestBody, responseBody };
+    "timestamp": 1738123332089
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
     },
-    ```
+    "body": {
+      "message": "Success"
+    },
+    "timestamp": 1738123333099
+  }
+}
+```
 
-- **Best Practices:**
-  - **Ensure Idempotency:**  
-    Make sure that modifications within `beforeLog` are idempotent to avoid inconsistent logging.
-  
-  - **Handle Edge Cases:**  
-    Always check if the `body` exists before attempting to modify it to prevent runtime errors.
-  
-  - **Maintain Data Integrity:**  
-    Avoid introducing errors or inconsistencies in the `body` data that could affect downstream processing or analysis.
+---
 
-By adhering to these guidelines, you can effectively utilize the `beforeLog` callback to enhance your logging strategy while maintaining data integrity and security.
+## **API Reference**
 
-If you have any further questions or need assistance with specific implementations, feel free to reach out!
+### **`init(config: object)`**
+
+Initializes the interceptor.
+
+```javascript
+const DRI = window.DD_RUM_INTERCEPTOR.init({ debug: true });
+```
+
+| Option  | Type   | Default | Description                  |
+| ------- | ------ | ------- | ---------------------------- |
+| `debug` | `bool` | `false` | Enable logging for debugging |
+
+---
+
+### **`getPayload({ event, context }): object | null`**
+
+Retrieves the **request/response payload** for a given Datadog RUM event.
+
+```javascript
+const data = DRI.getPayload({ event, context });
+console.log(data);
+```
+
+| Parameter   | Type     | Description                     |
+| ----------- | -------- | ------------------------------- | -------------------------------------------------- |
+| `event`     | `object` | The Datadog RUM event object.   |
+| `context`   | `object` | The Datadog RUM context object. |
+| **Returns** | `object  | null`                           | The extracted payload data or `null` if not found. |
+
+---
+
+### **`stop()`**
+
+Stops the interceptor and cleans up resources.
+
+```javascript
+DRI.stop();
+```
+
+---
+
+## **Troubleshooting**
+
+### **No request data is being captured**
+
+- Ensure **interceptor is initialized before Datadog RUM**.
+- Verify `beforeSend` is correctly configured.
+
+### **Requests with Trace ID are not matching**
+
+- Check if Datadog **injects trace headers** (`x-datadog-trace-id`).
+- If missing, the **fingerprinting fallback** will be used.

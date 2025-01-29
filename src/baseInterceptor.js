@@ -1,197 +1,137 @@
-/**
- * @file baseInterceptor.js
- * @description Shared logic for intercepting requests and logging them to Datadog Logs if present.
- */
-
 import { BatchInterceptor } from '@mswjs/interceptors';
-import { matchList, isMatchOption } from './utils/match';
-import { parseBody, applyMask } from './utils/parse';
 import { setLoggerDebug, logger } from './utils/logger';
-import { isNode, getDatadogLogs, getDatadogRum, statusCodeToMessage, getHeadersObject } from './utils/random';
+import { storeInterceptedData, getInterceptedData, storeTemporaryRequest, getAndRemoveTemporaryRequest, generateResponseFingerprint } from './utils/storage';
+import { getTraceId, buildDataObject, filterResource } from './utils/random';
 
 /**
- * @typedef {Object} InterceptorOptions
- * @property {Array<string|RegExp|Function>} [excludeUrls=[]] - URLs or paths to exclude from interception.
- * @property {Array<string>} [mask=[]] - Fields to mask in request/response bodies.
- * @property {Function} [beforeLog=null] - Callback for custom processing before logging.
- *   Note: This callback can only modify the `body` of the request and response.
- * @property {Object} [datadogRum=null] - Datadog instance for RUM.
- * @property {Object} [datadogLogs=null] - Datadog instance for Logs (Node.js only).
- * @property {Boolean} [debug=false] - Enable debugging for log outputs.
- */
-
-/**
- * Base function that sets up request interception, trace ID injection, and payload logging.
+ * Base function that sets up request and response interception.
  *
- * @param {InterceptorOptions} options
+ * @param {Object} options - Configuration options.
  * @param {import('@mswjs/interceptors').Interceptor[]} environmentInterceptors
- * @returns {{ stop: () => void }}
+ * @returns {{ stop: () => void, extractResourceData: (context: object) => object }}
  */
 export function createBaseInterceptor(options, environmentInterceptors) {
-    const {
-        excludeUrls = [],
-        mask = [],
-        beforeLog = null,
-        datadogLogs = null,
-        datadogRum = null,
-        debug = false,
-    } = options || {};
+    const { debug = false } = options || {};
 
-    // Hardcoded exclusion for all datadoghq.com URLs
-    const datadogExclusionPattern = /datadoghq\.com/i;
-
-    // Initialize the logger with debug settings
     setLoggerDebug(debug);
 
-    // Combine user-provided excludeUrls with the hardcoded Datadog exclusion
-    const combinedExcludeUrls = [
-        ...excludeUrls,
-        datadogExclusionPattern
-    ].filter(isMatchOption); // Ensure all are valid match options
-
-    // Initialize interceptors
     const interceptor = new BatchInterceptor({
         name: 'datadog-rum-interceptor',
-        interceptors: environmentInterceptors
+        interceptors: environmentInterceptors,
     });
 
     interceptor.apply();
 
-
     /**
-     * Log the captured request & response data, applying masking and custom processing.
-     *
-     * @param {Object} request
-     * @param {Object} response
+     * Listen for request events and store them using requestId.
      */
-    async function logToDatadog(request, response) {
-        const url = request.url;
-        const traceId = request.headers.get('x-datadog-trace-id') || null;
-
-        // Parse request and response bodies
-        const parsedRequestBody = await parseBody(request.body, request.headers.get('Content-Type') || '');
-        const parsedResponseBody = await parseBody(response.body, response.headers.get('Content-Type') || '');
-
-        // Apply masking
-        const maskedRequestBody = applyMask(parsedRequestBody, mask);
-        const maskedResponseBody = applyMask(parsedResponseBody, mask);
-
-        // Allow custom processing before logging (only body modification)
-        let modifiedRequestBody = maskedRequestBody;
-        let modifiedResponseBody = maskedResponseBody;
-
-        if (typeof beforeLog === 'function') {
-            try {
-                const result = await beforeLog(modifiedRequestBody, modifiedResponseBody);
-                if (result) {
-                    // Ensure only the body is modified
-                    if (result.requestBody && typeof result.requestBody === 'object') {
-                        modifiedRequestBody = result.requestBody || modifiedRequestBody;
-                    }
-                    if (result.responseBody && typeof result.responseBody === 'object') {
-                        modifiedResponseBody = result.responseBody || modifiedResponseBody;
-                    }
-                }
-            } catch (error) {
-                logger.error('Error in beforeLog callback:', error);
-            }
+    interceptor.on('request', async ({ request, requestId }) => {
+        // Filter out requests
+        if (filterResource(request)) {
+            return;
         }
 
-        // Retrieve service and env from Datadog RUM config if available
-        let service = 'unknown_service';
-        let env = 'unknown_env';
-        const rumInstance = getDatadogRum(datadogRum);
-        if (rumInstance && typeof rumInstance.getInitConfiguration === 'function') {
-            const rumConfig = rumInstance.getInitConfiguration();
-            service = rumConfig.service || service;
-            env = rumConfig.env || env;
-        } else {
-            logger.warn('Datadog RUM is not initialized or getInitConfiguration is unavailable.');
-        }
+        // Store request temporarily using requestId
+        const requestData = {
+            method: request.method,
+            url: request.url,
+            headers: Object.fromEntries(request.headers.entries()),
+            timestamp: Date.now(),
+        };
 
-        // Retrieve service and env from Datadog Logs config if available (Node.js)
-        if (isNode() && datadogLogs && typeof datadogLogs.getInitConfiguration === 'function') {
-            const logsConfig = datadogLogs.getInitConfiguration();
-            service = logsConfig.service || service;
-            env = logsConfig.env || env;
-        }
-
-        const ddLogs = getDatadogLogs(datadogLogs);
-
-        // Log to Datadog Logs if available
-        if (ddLogs?.logger) {
-            const logBody = {
-                request: {
-                    method: request.method,
-                    url: url,
-                    headers: Object.fromEntries(request.headers.entries()),
-                    body: modifiedRequestBody
-                },
-                response: {
-                    status: response.status,
-                    headers: Object.fromEntries(response.headers.entries()),
-                    body: modifiedResponseBody
-                }
-            };
-            logger.log("log body", logBody);
-
-            // Log data.
-            ddLogs.logger.log(logBody,
-                {
-                    dd: {
-                        trace_id: traceId,
-                    }
-                },
-                statusCodeToMessage(response.status)
-            );
-        } else {
-            logger.warn("Datadog Logs logger is not available. Skipping log.");
-        }
-    }
-
-    /**
-     * Listen for response events and log them
-     */
-    interceptor.on('response', async ({ response, request }) => {
-
-        // Early evaluation: Check if the URL should be excluded
-        const isExcluded = matchList(combinedExcludeUrls, request.url);
-        if (isExcluded) {
-            logger.log('Request excluded from tracing:', request.url);
-            return; // Skip processing and logging
-        }
-
-        // Dynamically retrieve allowedTracingUrls from RUM configuration
-        let allowedTracingUrls = [];
-        const rumInstance = getDatadogRum();
-        if (rumInstance && typeof rumInstance.getInitConfiguration === 'function') {
-            const rumConfig = rumInstance.getInitConfiguration();
-            allowedTracingUrls = rumConfig?.allowedTracingUrls || [];
-        } else {
-            logger.warn('Datadog RUM is not initialized or getInitConfiguration is unavailable.');
-        }
-
-        // Check if URL matches any allowedTracingUrls
-        const isAllowed = matchList(allowedTracingUrls, request.url, true); // useStartsWith = true
-        if (!isAllowed) {
-            logger.info('URL not allowed for tracing:', request.url);
-            return; // Skip processing
-        }
-
-        // Clone request and response to safely read their bodies
-        const clonedRequest = await request.clone();
-        const clonedResponse = await response.clone();
-
-        // Log the request and response
-        await logToDatadog(clonedRequest, clonedResponse);
+        storeTemporaryRequest(requestId, requestData);
+        logger.log(`Intercepted Request: ${request.url}`, requestData);
     });
 
     /**
-     * Stop the interceptor and clean up.
+     * Listen for response events and match with stored requests.
      */
-    function stop() {
-        interceptor.dispose();
+    interceptor.on('response', async ({ request, response, requestId }) => {
+        // Filter out requests
+        if (filterResource(request)) {
+            return;
+        }
+
+        // Retrieve the stored request using requestId
+        const requestData = getAndRemoveTemporaryRequest(requestId);
+        logger.log({requestData})
+
+        if (!requestData) {
+            logger.warn(`No matching request found for response: ${response.url}`);
+            return;
+        }
+
+        // Build the response data object.
+        const responseData = await buildDataObject(response);
+        // Merge requestData into responseData, only filling in null values.
+        Object.keys(responseData).forEach((key) => {
+            if ((responseData[key] === null || responseData[key] === "") && requestData[key] !== undefined) {
+                responseData[key] = requestData[key];
+            }
+        });
+
+        // Use trace ID if available, otherwise generate a fingerprint
+        const id = request.headers.get('x-datadog-trace-id') ?? generateResponseFingerprint(responseData, 'interceptor ');
+
+        // Store the combined request-response data
+        const storedData = { request: requestData, response: responseData };
+        storeInterceptedData(id, storedData);
+
+        logger.log(`Intercepted Response: ${response.url}`, storedData);
+    });
+
+    /**
+     * Retrieves the payload data for a given Datadog RUM event and context.
+     * @param {Object} beforeSend - The object containing Datadog RUM `event` and `context`.
+     * @returns {Object|null} The extracted payload data or null if no match.
+     */
+    function getPayload(beforeSend) {
+        if (!beforeSend || typeof beforeSend !== 'object') {
+            console.warn('Invalid beforeSend object provided.');
+            return null;
+        }
+
+        const { event, context } = beforeSend;
+
+        if (!event || !context) {
+            console.warn('Both `event` and `context` are required.');
+            return null;
+        }
+
+        try {
+            // Get the trace ID from the context headers or generate a fingerprint.
+            const id = getTraceId(context) ?? generateResponseFingerprint({
+                method: event.resource?.method || 'GET',
+                url: event.resource?.url || "",
+                status: event.resource?.status_code || "",
+                timestamp: event.date || Date.now(),
+            }, 'extractor');
+
+            // Retrieve the stored data using the trace ID or fingerprint.
+            const responseData = getInterceptedData(id);
+
+            // Log a warning if no match is found.
+            if (!responseData) {
+                logger.warn('No match found for request:', context);
+            }
+
+            // Add resource type for clarity.
+            responseData.type = event.resource.type = 'resource';
+
+            return responseData;
+        } catch (err) {
+            logger.error('Failed to extract resource data:', err);
+            return null;
+        }
     }
 
-    return { stop };
+    function stop() {
+        interceptor.dispose();
+        logger.info('Interceptor stopped.');
+    }
+
+    return {
+        stop,
+        extractResourceData,
+    };
 }
