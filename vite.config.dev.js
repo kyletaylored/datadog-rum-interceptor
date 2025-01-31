@@ -1,12 +1,13 @@
-// vite.config.js
+// vite.config.dev.js
 import { defineConfig } from "vite";
 
+let currentFormat;
+
 export default defineConfig(({ mode }) => {
-    // Base configuration.
-    let config = {
+    return {
         build: {
             target: "es2015",
-            minify: true,
+            minify: (mode === 'development') ? false : true,
             outDir: "dist",
             lib: {
                 entry: ["src/index.js"],
@@ -14,23 +15,11 @@ export default defineConfig(({ mode }) => {
                 fileName: (format, entryName) => `${format}/${entryName}.js`,
                 formats: ["es", "umd", "cjs"],
             },
-            rollupOptions: {
-                output: {
-                    format: "umd",
-                    name: "DD_RUM_INTERCEPTOR",
-                },
-            },
+
         },
         watch: {
             include: ["src/**"],
             exclude: ["node_modules/**"],
         }
     };
-
-    // Development configuration.
-    if (mode === 'development') {
-        config.build.minify = false;
-    }
-
-    return config;
 });

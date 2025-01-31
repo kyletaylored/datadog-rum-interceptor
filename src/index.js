@@ -13,7 +13,7 @@ import { XMLHttpRequestInterceptor } from '@mswjs/interceptors/XMLHttpRequest';
  * @param {Object} config - Configuration options for the interceptor.
  * @returns {{ stop: () => void, getRequestData: (id: string) => Object|undefined }}
  */
-export function init(config = {}) {
+function init(config = {}) {
     const environmentInterceptors = [
         new FetchInterceptor(),
         new XMLHttpRequestInterceptor(),
@@ -24,3 +24,5 @@ export function init(config = {}) {
 
     return interceptor;
 }
+
+export default { init };

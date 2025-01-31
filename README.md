@@ -27,7 +27,7 @@ npm install @kyletaylored/datadog-rum-interceptor
 For direct use in the **browser**:
 
 ```html
-<script src="https://www.unpkg.com/@kyletaylored/datadog-rum-interceptor@latest/umd/main.js"></script>
+<script src="https://www.unpkg.com/@kyletaylored/datadog-rum-interceptor/dist/umd/index.js"></script>
 ```
 
 ---
@@ -62,10 +62,10 @@ window.DD_RUM.init({
 ### **In a Node.js Environment**
 
 ```javascript
-import { init } from "@kyletaylored/datadog-rum-interceptor";
+import datadogRumInterceptor from "@kyletaylored/datadog-rum-interceptor";
 import { datadogRum } from '@datadog/browser-rum'
 
-const DRI = init();
+const DRI = datadogRumInterceptor.init({ debug: true });
 
 datadogRum.init({
   applicationId: '<DATADOG_APPLICATION_ID>',
