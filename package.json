@@ -1,7 +1,7 @@
 {
   "name": "@kyletaylored/datadog-rum-interceptor",
   "description": "A lightweight request/response interceptor to provide payload visibility for debugging and monitoring.",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "author": "Kyle Taylor <kyle.taylor@datadoghq.com>",
   "license": "MIT",
   "type": "module",
@@ -15,9 +15,6 @@
     "!.github/",
     "!test/"
   ],
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/es/index.js",
-  "browser": "./dist/umd/index.js",
   "exports": {
     ".": {
       "browser": "./dist/umd/index.js",
