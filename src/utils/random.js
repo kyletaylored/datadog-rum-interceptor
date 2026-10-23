@@ -19,15 +19,62 @@ export function getHeaders(headers) {
 }
 
 /**
+ * Datadog domains whose traffic (RUM intake, logs, etc.) should never be intercepted.
+ * Covers every Datadog site: US1/US3/US5 and AP1/AP2 (datadoghq.com), EU1 (datadoghq.eu), US1-FED (ddog-gov.com).
+ */
+const DATADOG_DOMAINS = ['datadoghq.com', 'datadoghq.eu', 'ddog-gov.com'];
+
+/**
  * Filter out requests.
  * @param {Request|Response} resource 
- * @returns 
+ * @returns {boolean} True if the resource should be ignored.
  */
 export function filterResource(resource) {
-    // Exclude datadoghq.com requests.
-    if (resource.url.includes('datadoghq.com')) {
-        return true;
-    };
+    let hostname;
+    try {
+        hostname = new URL(resource.url).hostname.toLowerCase();
+    } catch (err) {
+        return false;
+    }
+
+    // Exclude requests to Datadog domains: exact match, subdomains, and browser intake hosts
+    // such as browser-intake-datadoghq.com or browser-intake-us3-datadoghq.com.
+    return DATADOG_DOMAINS.some((domain) => {
+        if (!hostname.endsWith(domain)) return false;
+        const prefix = hostname.slice(0, -domain.length);
+        return prefix === '' || prefix.endsWith('.') || /(^|\.)browser-intake-([a-z0-9]+-)?$/.test(prefix);
+    });
+}
+
+/**
+ * Header names that are redacted by default before payloads are stored.
+ */
+export const DEFAULT_REDACTED_HEADERS = [
+    'authorization',
+    'proxy-authorization',
+    'cookie',
+    'set-cookie',
+    'x-api-key',
+    'x-auth-token',
+    'x-csrf-token',
+    'x-xsrf-token',
+];
+
+export const REDACTED_VALUE = '[REDACTED]';
+
+/**
+ * Returns a copy of a headers object with sensitive values replaced.
+ * @param {Object} headers - Plain headers object.
+ * @param {string[]} redactedHeaders - Header names to redact (case-insensitive).
+ * @returns {Object} Headers object with redacted values.
+ */
+export function redactHeaders(headers, redactedHeaders = DEFAULT_REDACTED_HEADERS) {
+    if (!headers || typeof headers !== 'object') return headers;
+
+    const redacted = new Set(redactedHeaders.map((name) => name.toLowerCase()));
+    return Object.fromEntries(
+        Object.entries(headers).map(([key, value]) => [key, redacted.has(key.toLowerCase()) ? REDACTED_VALUE : value])
+    );
 }
 
 /**
@@ -92,7 +139,7 @@ export async function buildDataObject(object) {
 
 /**
  * A universal body parser that works in both Node.js and browser environments.
- * Supports JSON, XML, and plain text parsing using native tools.
+ * Parses JSON bodies; everything else is returned as trimmed text.
  * @param {ReadableStream | string | Buffer | null} body - The raw body to parse
  * @returns {Promise<unknown>} Returns a parsed object/string based on inferred type
  */
@@ -131,49 +178,6 @@ export async function parseBody(body) {
         }
 
         return trimmedBody;
-
-        // Try parsing as XML if it starts with < and isn't HTML
-        if (trimmedBody.startsWith('<')) {
-            if (!trimmedBody.toLowerCase().startsWith('<html') &&
-                !trimmedBody.toLowerCase().startsWith('<!doctype html')) {
-                try {
-                    // Use DOMParser for XML parsing (available in browsers)
-                    if (typeof DOMParser === 'undefined') {
-                        // In Node.js, use JSDOM for XML parsing.
-                        const { JSDOM } = require('jsdom');
-                        const dom = new JSDOM();
-                        const parser = new dom.window.DOMParser();
-                        const xmlDoc = parser.parseFromString(trimmedBody, 'text/xml');
-
-                        // Check for parsing errors
-                        const parseError = xmlDoc.querySelector('parsererror');
-                        if (parseError) {
-                            throw new Error(parseError.textContent);
-                        }
-
-                        return xmlDoc;
-                    } else {
-                        // In browser, use native DOMParser
-                        const parser = new DOMParser();
-                        const xmlDoc = parser.parseFromString(trimmedBody, 'text/xml');
-
-                        // Check for parsing errors
-                        const parseError = xmlDoc.querySelector('parsererror');
-                        if (parseError) {
-                            throw new Error(parseError.textContent);
-                        }
-
-                        return xmlDoc;
-                    }
-                } catch (err) {
-                    logger.warn('Failed to parse XML body:', err);
-                    return bodyText;
-                }
-            }
-        }
-
-        // Default: Return as plain text
-        return bodyText;
 
     } catch (err) {
         logger.error('Error parsing body:', err);

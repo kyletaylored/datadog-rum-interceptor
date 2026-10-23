@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
             lib: {
                 entry: ["src/index.js"],
                 name: "DD_RUM_INTERCEPTOR",
-                fileName: (format, entryName) => `${format}/${entryName}.js`,
+                fileName: (format, entryName) => `${format}/${entryName}.${format === "cjs" ? "cjs" : "js"}`,
                 formats: ["es", "umd", "cjs"],
             },
 

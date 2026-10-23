@@ -8,8 +8,10 @@
 - Captures request & response payloads
 - Seamlessly integrates with Datadog RUM
 - Uses Trace ID if available, falls back to fingerprinting
-- Automatically evicts unmatched requests after 5 seconds
-- Users can modify the payload data as needed to remove or redact sensitive information.
+- Automatically evicts unmatched requests after 5 seconds and unclaimed payloads after 30 seconds
+- Redacts credential headers (`Authorization`, `Cookie`, `Set-Cookie`, etc.) by default
+- Ignores requests to Datadog domains (RUM/log intake on every Datadog site)
+- Users can modify the payload data as needed to remove or redact other sensitive information, such as request/response bodies.
   - [Sensitive Data Scanner](https://docs.datadoghq.com/sensitive_data_scanner/) can also be used for RUM events within Datadog.
 
 ---
@@ -119,6 +121,7 @@ graph TD;
 3. **Stores data temporarily**
    - **Request data is stored using `requestId`** until the response is received.
    - **Unmatched requests are automatically evicted after 5 seconds**.
+   - **Payloads not claimed by `getPayload` are evicted after 30 seconds**.
 4. **Retrieves payload in `beforeSend`**
    - The `getPayload({ event, context })` method **automatically** finds and attaches the payload.
 
@@ -134,9 +137,12 @@ Initializes the interceptor.
 const DRI = window.DD_RUM_INTERCEPTOR.init({ debug: true });
 ```
 
-| Option  | Type   | Default | Description                  |
-| ------- | ------ | ------- | ---------------------------- |
-| `debug` | `bool` | `false` | Enable logging for debugging |
+| Option          | Type       | Default                  | Description                                                                 |
+| --------------- | ---------- | ------------------------ | --------------------------------------------------------------------------- |
+| `debug`         | `bool`     | `false`                  | Enable logging for debugging                                                |
+| `redactHeaders` | `string[]` | Common credential headers | Header names (case-insensitive) whose values are replaced with `[REDACTED]`. Pass `[]` to disable. |
+
+The default `redactHeaders` list is `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key`, `x-auth-token`, `x-csrf-token`, and `x-xsrf-token`. Request and response **bodies are not redacted**.
 
 ---
 
@@ -159,7 +165,7 @@ console.log(data);
 
 ### **`stop()`**
 
-Stops the interceptor and cleans up resources.
+Stops the interceptor and clears any stored request/response data.
 
 ```javascript
 DRI.stop();
@@ -178,6 +184,18 @@ DRI.stop();
 
 - Check if Datadog **injects trace headers** (`x-datadog-trace-id`).
 - If missing, the **fingerprinting fallback** will be used.
+
+---
+
+## **Development**
+
+```bash
+npm ci
+npm run build   # Build ES, CJS, and UMD bundles into dist/
+npm test        # Run the Vitest suite (unit + fetch/XHR integration tests)
+```
+
+CI runs `npm audit`, the build, and the tests on every push and pull request.
 
 ---
 

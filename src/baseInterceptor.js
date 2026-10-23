@@ -1,7 +1,7 @@
 import { BatchInterceptor } from '@mswjs/interceptors';
 import { setLoggerDebug, logger } from './utils/logger';
-import { storeInterceptedData, getInterceptedData, storeTemporaryRequest, getAndRemoveTemporaryRequest, generateResponseFingerprint } from './utils/storage';
-import { getTraceId, buildDataObject, filterResource, getXhrHeaders, getHeaders } from './utils/random';
+import { storeInterceptedData, getInterceptedData, storeTemporaryRequest, getAndRemoveTemporaryRequest, generateResponseFingerprint, clearInterceptedData } from './utils/storage';
+import { getTraceId, buildDataObject, filterResource, getXhrHeaders, getHeaders, redactHeaders, DEFAULT_REDACTED_HEADERS } from './utils/random';
 
 /**
  * Base function that sets up request and response interception.
@@ -11,7 +11,7 @@ import { getTraceId, buildDataObject, filterResource, getXhrHeaders, getHeaders 
  * @returns {{ stop: () => void, getPayload: (context: object) => object }}
  */
 export function createBaseInterceptor(options, environmentInterceptors) {
-    const { debug = false } = options || {};
+    const { debug = false, redactHeaders: redactedHeaders = DEFAULT_REDACTED_HEADERS } = options || {};
 
     setLoggerDebug(debug);
 
@@ -71,8 +71,12 @@ export function createBaseInterceptor(options, environmentInterceptors) {
         // Use trace ID if available, otherwise generate a fingerprint
         const id = request.headers.get('x-datadog-trace-id') ?? generateResponseFingerprint(responseData, 'interceptor ');
 
-        // Store the combined request-response data
-        const storedData = { request: requestData, response: responseData };
+        // Store the combined request-response data, redacting sensitive headers.
+        // Redaction happens after fingerprinting so IDs still match the unredacted headers seen by getPayload.
+        const storedData = {
+            request: { ...requestData, headers: redactHeaders(requestData.headers, redactedHeaders) },
+            response: { ...responseData, headers: redactHeaders(responseData.headers, redactedHeaders) },
+        };
         storeInterceptedData(id, storedData);
 
         logger.log(`Intercepted Response: ${response.url}`, storedData);
@@ -96,11 +100,12 @@ export function createBaseInterceptor(options, environmentInterceptors) {
             return null;
         }
 
-        // Check if XHR or Fetch event
-        const isXHR = event.resource?.type === 'xhr';
-        const headers = !isXHR ? context.response.headers : getXhrHeaders(context.xhr.getAllResponseHeaders());
-
         try {
+            // Check if XHR or Fetch event. Failed requests may have no response/xhr, so fall back to empty headers.
+            const isXHR = event.resource?.type === 'xhr';
+            const rawHeaders = isXHR ? getXhrHeaders(context.xhr?.getAllResponseHeaders?.()) : context.response?.headers;
+            const headers = rawHeaders instanceof Headers ? rawHeaders : new Headers();
+
             // Get the trace ID from the context headers or generate a fingerprint.
             const id = getTraceId(context) ?? generateResponseFingerprint({
                 method: event.resource?.method || 'GET',
@@ -127,6 +132,7 @@ export function createBaseInterceptor(options, environmentInterceptors) {
 
     function stop() {
         interceptor.dispose();
+        clearInterceptedData();
         logger.info('Interceptor stopped.');
     }
 
