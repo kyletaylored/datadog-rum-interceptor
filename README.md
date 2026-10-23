@@ -61,7 +61,7 @@ window.DD_RUM.init({
 
 ---
 
-### **In a Node.js Environment**
+### **With a Bundler (npm)**
 
 ```javascript
 import datadogRumInterceptor from "@kyletaylored/datadog-rum-interceptor";
@@ -104,7 +104,9 @@ graph TD;
   G -->|Response received| H[Retrieve request-response pair];
   G -->|No response within 5s| I[Evict unmatched requests];
 
-  H --> J[Call getPayload in beforeSend];
+  H --> R[Redact sensitive headers and store payload];
+  R --> J[Call getPayload in beforeSend];
+  R -->|Not claimed within 30s| L[Evict unclaimed payload];
   J --> K[Attach payload to context or log];
 
   style A fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
@@ -122,7 +124,9 @@ graph TD;
    - **Request data is stored using `requestId`** until the response is received.
    - **Unmatched requests are automatically evicted after 5 seconds**.
    - **Payloads not claimed by `getPayload` are evicted after 30 seconds**.
-4. **Retrieves payload in `beforeSend`**
+4. **Redacts sensitive headers**
+   - Credential headers such as `Authorization` and `Cookie` are replaced with `[REDACTED]` before the payload is stored (see `redactHeaders`).
+5. **Retrieves payload in `beforeSend`**
    - The `getPayload({ event, context })` method **automatically** finds and attaches the payload.
 
 ---
@@ -185,6 +189,14 @@ DRI.stop();
 - Check if Datadog **injects trace headers** (`x-datadog-trace-id`).
 - If missing, the **fingerprinting fallback** will be used.
 
+### **Headers show `[REDACTED]`**
+
+- Credential headers are redacted by default. Pass a custom list, e.g. `init({ redactHeaders: ['authorization'] })`, or `init({ redactHeaders: [] })` to disable redaction.
+
+### **Payloads are missing for slow or late events**
+
+- Payloads that aren't claimed by `getPayload` within **30 seconds** are evicted. Make sure `getPayload` is called from `beforeSend`.
+
 ---
 
 ## **Development**
@@ -196,6 +208,14 @@ npm test        # Run the Vitest suite (unit + fetch/XHR integration tests)
 ```
 
 CI runs `npm audit`, the build, and the tests on every push and pull request.
+
+### **Releasing**
+
+1. Update `version` in `package.json` (and `package-lock.json`) with `npm version <x.y.z> --no-git-tag-version`, and add an entry to [`CHANGELOG.md`](CHANGELOG.md).
+2. Merge to `main`.
+3. Publish a GitHub release whose tag matches the version (e.g. `0.1.0`).
+
+The [publish workflow](.github/workflows/publish.yml) checks that the tag matches `package.json`, runs the audit, build, and tests, then publishes to npm using [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC, with provenance). No npm token is stored in the repository. Running the workflow manually performs a dry run without publishing.
 
 ---
 

@@ -11,9 +11,7 @@
   },
   "files": [
     "src",
-    "dist",
-    "!.github/",
-    "!test/"
+    "dist"
   ],
   "exports": {
     ".": {
