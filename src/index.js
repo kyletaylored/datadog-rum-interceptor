@@ -11,7 +11,9 @@ import { XMLHttpRequestInterceptor } from '@mswjs/interceptors/XMLHttpRequest';
  * Initialize the interceptor with Fetch and XHR interceptors.
  *
  * @param {Object} config - Configuration options for the interceptor.
- * @returns {{ stop: () => void, getRequestData: (id: string) => Object|undefined }}
+ * @param {boolean} [config.debug=false] - Enable debug logging.
+ * @param {string[]} [config.redactHeaders] - Header names to redact from stored payloads (defaults to common credential headers; pass [] to disable).
+ * @returns {{ stop: () => void, getPayload: (beforeSend: { event: Object, context: Object }) => Object|null }}
  */
 function init(config = {}) {
     const environmentInterceptors = [

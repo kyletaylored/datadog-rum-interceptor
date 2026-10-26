@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
             emptyOutDir: false,
             lib: {
                 entry: ["src/index.js"],
-                fileName: (format, entryName) => `${format}/${entryName}.js`,
+                fileName: (format, entryName) => `${format}/${entryName}.${format === "cjs" ? "cjs" : "js"}`,
                 formats: ["es", "cjs"],
             },
             rollupOptions: {

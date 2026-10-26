@@ -8,8 +8,10 @@
 - Captures request & response payloads
 - Seamlessly integrates with Datadog RUM
 - Uses Trace ID if available, falls back to fingerprinting
-- Automatically evicts unmatched requests after 5 seconds
-- Users can modify the payload data as needed to remove or redact sensitive information.
+- Automatically evicts unmatched requests after 5 seconds and unclaimed payloads after 30 seconds
+- Redacts credential headers (`Authorization`, `Cookie`, `Set-Cookie`, etc.) by default
+- Ignores requests to Datadog domains (RUM/log intake on every Datadog site)
+- Users can modify the payload data as needed to remove or redact other sensitive information, such as request/response bodies.
   - [Sensitive Data Scanner](https://docs.datadoghq.com/sensitive_data_scanner/) can also be used for RUM events within Datadog.
 
 ---
@@ -59,7 +61,7 @@ window.DD_RUM.init({
 
 ---
 
-### **In a Node.js Environment**
+### **With a Bundler (npm)**
 
 ```javascript
 import datadogRumInterceptor from "@kyletaylored/datadog-rum-interceptor";
@@ -102,7 +104,9 @@ graph TD;
   G -->|Response received| H[Retrieve request-response pair];
   G -->|No response within 5s| I[Evict unmatched requests];
 
-  H --> J[Call getPayload in beforeSend];
+  H --> R[Redact sensitive headers and store payload];
+  R --> J[Call getPayload in beforeSend];
+  R -->|Not claimed within 30s| L[Evict unclaimed payload];
   J --> K[Attach payload to context or log];
 
   style A fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
@@ -119,7 +123,10 @@ graph TD;
 3. **Stores data temporarily**
    - **Request data is stored using `requestId`** until the response is received.
    - **Unmatched requests are automatically evicted after 5 seconds**.
-4. **Retrieves payload in `beforeSend`**
+   - **Payloads not claimed by `getPayload` are evicted after 30 seconds**.
+4. **Redacts sensitive headers**
+   - Credential headers such as `Authorization` and `Cookie` are replaced with `[REDACTED]` before the payload is stored (see `redactHeaders`).
+5. **Retrieves payload in `beforeSend`**
    - The `getPayload({ event, context })` method **automatically** finds and attaches the payload.
 
 ---
@@ -134,9 +141,12 @@ Initializes the interceptor.
 const DRI = window.DD_RUM_INTERCEPTOR.init({ debug: true });
 ```
 
-| Option  | Type   | Default | Description                  |
-| ------- | ------ | ------- | ---------------------------- |
-| `debug` | `bool` | `false` | Enable logging for debugging |
+| Option          | Type       | Default                  | Description                                                                 |
+| --------------- | ---------- | ------------------------ | --------------------------------------------------------------------------- |
+| `debug`         | `bool`     | `false`                  | Enable logging for debugging                                                |
+| `redactHeaders` | `string[]` | Common credential headers | Header names (case-insensitive) whose values are replaced with `[REDACTED]`. Pass `[]` to disable. |
+
+The default `redactHeaders` list is `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-api-key`, `x-auth-token`, `x-csrf-token`, and `x-xsrf-token`. Request and response **bodies are not redacted**.
 
 ---
 
@@ -159,7 +169,7 @@ console.log(data);
 
 ### **`stop()`**
 
-Stops the interceptor and cleans up resources.
+Stops the interceptor and clears any stored request/response data.
 
 ```javascript
 DRI.stop();
@@ -178,6 +188,50 @@ DRI.stop();
 
 - Check if Datadog **injects trace headers** (`x-datadog-trace-id`).
 - If missing, the **fingerprinting fallback** will be used.
+
+### **Headers show `[REDACTED]`**
+
+- Credential headers are redacted by default. Pass a custom list, e.g. `init({ redactHeaders: ['authorization'] })`, or `init({ redactHeaders: [] })` to disable redaction.
+
+### **Payloads are missing for slow or late events**
+
+- Payloads that aren't claimed by `getPayload` within **30 seconds** are evicted. Make sure `getPayload` is called from `beforeSend`.
+
+---
+
+## **Development**
+
+```bash
+npm ci
+npm run build   # Build ES, CJS, and UMD bundles into dist/
+npm test        # Run the Vitest suite (unit + fetch/XHR integration tests)
+```
+
+CI runs `npm audit`, the build, and the tests on every push and pull request.
+
+### **Releasing**
+
+Releases are automated by the [release workflow](.github/workflows/release.yml) and triggered by merging a version bump to `main`.
+
+1. As changes land, add entries under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), which follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Group entries under `### Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`, in that order. CI runs `npm run release:check` to enforce the format.
+2. On a branch, run:
+
+   ```bash
+   npm run release:prepare -- <patch|minor|major|x.y.z>
+   ```
+
+   This bumps the version in `package.json` and `package-lock.json` and moves the Unreleased entries into a dated version section. Open a pull request titled `Release x.y.z`.
+3. Merge the pull request after CI passes. The release workflow then:
+   1. Checks whether the version is already on npm and tagged. If both are true, it does nothing.
+   2. Validates the changelog, installs dependencies without install scripts, verifies dependency signatures, audits, builds, and tests.
+   3. Builds the package twice and fails if the two tarballs aren't byte-identical.
+   4. Signs a build provenance attestation for the tarball.
+   5. Publishes **that same tarball** to npm with [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC, with provenance). No npm token is stored anywhere. Prerelease versions (`x.y.z-rc.1`) go to the `next` dist-tag.
+   6. Creates the git tag and GitHub release with the changelog notes, the tarball, and `SHA256SUMS`.
+
+If a run fails partway through, fix the cause and re-run it (or run the workflow manually from `main`). It only does the steps that haven't completed yet.
+
+See [SECURITY.md](SECURITY.md) for how to verify a release.
 
 ---
 

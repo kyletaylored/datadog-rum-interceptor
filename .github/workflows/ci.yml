@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      # Dependencies never run install scripts; the build runs explicitly below
+      - run: npm ci --ignore-scripts
+      - run: npm audit signatures
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npm test
+      - run: npm run release:check
+      - name: Verify reproducible package
+        run: |
+          mkdir -p "$RUNNER_TEMP/a" "$RUNNER_TEMP/b"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/a"
+          rm -rf dist
+          npm run build
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/b"
+          cmp "$RUNNER_TEMP"/a/*.tgz "$RUNNER_TEMP"/b/*.tgz
+          tar -tzf "$RUNNER_TEMP"/b/*.tgz
