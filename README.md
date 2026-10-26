@@ -213,7 +213,7 @@ CI runs `npm audit`, the build, and the tests on every push and pull request.
 
 Releases are automated by the [release workflow](.github/workflows/release.yml) and triggered by merging a version bump to `main`.
 
-1. As changes land, add entries under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md).
+1. As changes land, add entries under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), which follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Group entries under `### Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`, in that order. CI runs `npm run release:check` to enforce the format.
 2. On a branch, run:
 
    ```bash

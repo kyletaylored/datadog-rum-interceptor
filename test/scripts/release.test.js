@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { getReleaseNotes, prepareChangelog, validateChangelog, bumpVersion } from '../../scripts/release.mjs';
+import { getReleaseNotes, prepareChangelog, validateChangelog, bumpVersion, compareVersions } from '../../scripts/release.mjs';
 
 const REPO = 'https://github.com/kyletaylored/datadog-rum-interceptor';
 
@@ -18,7 +18,8 @@ const changelog = `# Changelog
 
 ## [0.0.9] - 2025-02-04
 
-Old.
+### Removed
+- Old.
 
 [Unreleased]: ${REPO}/compare/0.1.0...HEAD
 [0.1.0]: ${REPO}/compare/0.0.9...0.1.0
@@ -31,7 +32,7 @@ describe('getReleaseNotes', () => {
     });
 
     it('stops the last section before link references', () => {
-        expect(getReleaseNotes(changelog, '0.0.9')).toBe('Old.');
+        expect(getReleaseNotes(changelog, '0.0.9')).toBe('### Removed\n- Old.');
     });
 
     it('returns null for missing or empty sections', () => {
@@ -79,7 +80,54 @@ describe('validateChangelog', () => {
         const broken = changelog.replace('## [Unreleased]\n\n### Fixed\n- Something new.\n\n', '').replace('0.1.0] - 2026-10-26', '0.1.0] - Unreleased');
         const problems = validateChangelog(broken, '0.1.0');
         expect(problems).toContain('The first section must be "## [Unreleased]".');
-        expect(problems).toContain('Section 0.1.0 must be dated as "## [0.1.0] - YYYY-MM-DD".');
+        expect(problems).toContain('[0.1.0]: heading must be "## [0.1.0] - YYYY-MM-DD" (optionally followed by " [YANKED]").');
+    });
+
+    describe('Keep a Changelog rules', () => {
+        const problemsFor = (text, version = '0.1.0') => validateChangelog(text, version);
+
+        it('rejects unknown change types', () => {
+            expect(problemsFor(changelog.replace('### Added', '### New'))).toContain(
+                '[0.1.0]: unknown change type "New". Use one of: Added, Changed, Deprecated, Removed, Fixed, Security.'
+            );
+        });
+
+        it('rejects groups out of canonical order', () => {
+            const text = changelog.replace('### Added\n- Feature.', '### Fixed\n- Bug.\n\n### Added\n- Feature.');
+            expect(problemsFor(text)).toContain('[0.1.0]: "Added" must come before "Fixed" (order: Added, Changed, Deprecated, Removed, Fixed, Security).');
+        });
+
+        it('rejects duplicate and empty groups', () => {
+            const text = changelog.replace('### Added\n- Feature.', '### Added\n- Feature.\n\n### Added\n- Again.\n\n### Fixed\n');
+            const problems = problemsFor(text);
+            expect(problems).toContain('[0.1.0]: duplicate "Added" group.');
+            expect(problems).toContain('[0.1.0]: "Fixed" group has no entries.');
+        });
+
+        it('rejects ungrouped entries, including under Unreleased', () => {
+            const text = changelog.replace('### Fixed\n- Something new.', '- Something new.');
+            expect(problemsFor(text)).toContain(
+                '[Unreleased]: entries must be grouped under a change type heading (Added, Changed, Deprecated, Removed, Fixed, Security).'
+            );
+        });
+
+        it('rejects versions out of order and duplicates', () => {
+            const swapped = changelog.replace('## [0.1.0] - 2026-10-26', '## [0.0.8] - 2026-10-26').replace('[0.1.0]: ', '[0.0.8]: ');
+            expect(problemsFor(swapped, '0.0.8')).toContain('[0.0.8]: versions must be listed newest first (found before 0.0.9).');
+            const duplicated = changelog.replace('## [0.0.9] - 2025-02-04', '## [0.1.0] - 2025-02-04');
+            expect(problemsFor(duplicated)).toContain('[0.1.0]: duplicate version section.');
+        });
+
+        it('rejects malformed section headings', () => {
+            const text = changelog.replace('## [0.0.9] - 2025-02-04', '## 0.0.9 - 2025-02-04');
+            expect(problemsFor(text)).toContain('Malformed section heading "## 0.0.9 - 2025-02-04". Use "## [x.y.z] - YYYY-MM-DD".');
+        });
+
+        it('accepts yanked releases, but not as the current version', () => {
+            const text = changelog.replace('## [0.0.9] - 2025-02-04', '## [0.0.9] - 2025-02-04 [YANKED]');
+            expect(problemsFor(text)).toEqual([]);
+            expect(problemsFor(text, '0.0.9')).toContain('[0.0.9]: the package.json version is marked [YANKED].');
+        });
     });
 
     it('reports missing link references', () => {
@@ -90,6 +138,19 @@ describe('validateChangelog', () => {
         const repoChangelog = readFileSync(new URL('../../CHANGELOG.md', import.meta.url), 'utf8');
         const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
         expect(validateChangelog(repoChangelog, version)).toEqual([]);
+    });
+});
+
+describe('compareVersions', () => {
+    it.each([
+        ['0.1.0', '0.0.9', 1],
+        ['0.0.9', '0.1.0', -1],
+        ['1.0.0', '1.0.0', 0],
+        ['1.0.0-rc.1', '1.0.0', -1],
+        ['1.0.0-rc.10', '1.0.0-rc.2', 1],
+        ['0.10.0', '0.9.0', 1],
+    ])('compare(%s, %s) has sign %i', (a, b, sign) => {
+        expect(Math.sign(compareVersions(a, b))).toBe(sign);
     });
 });
 
