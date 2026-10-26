@@ -1,8 +1,10 @@
 name: Release
 
 # Releases run when a version bump lands on main (see "Releasing" in README.md).
-# Every step is idempotent: re-running after a partial failure only does what's left
-# (publish to npm and/or create the GitHub release) for the version in package.json.
+# The package is *staged* on npm (`npm stage publish`); a maintainer approves it with 2FA
+# on npmjs.com before it becomes public. The git tag marks a version as handled: once it
+# exists, later runs do nothing for that version. To recover from a partial failure, use
+# "Re-run failed jobs" so steps that already succeeded (such as staging) aren't repeated.
 on:
   push:
     branches: [main]
@@ -58,7 +60,9 @@ jobs:
             TAG_EXISTS=false
           fi
 
-          if [ "$NPM_PUBLISHED" = true ] && [ "$TAG_EXISTS" = true ]; then
+          # A staged (not yet approved) version isn't visible on the public registry, so the tag is the
+          # marker that this version was already staged or published.
+          if [ "$TAG_EXISTS" = true ]; then
             RELEASE_NEEDED=false
           else
             RELEASE_NEEDED=true
@@ -76,7 +80,7 @@ jobs:
 
           {
             echo "### $NAME@$VERSION"
-            echo "- Published to npm: $NPM_PUBLISHED"
+            echo "- Public on npm: $NPM_PUBLISHED"
             echo "- Git tag exists: $TAG_EXISTS"
             echo "- Release needed: $RELEASE_NEEDED"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -136,7 +140,7 @@ jobs:
           retention-days: 30
 
   publish-npm:
-    name: Publish to npm
+    name: Stage on npm
     needs: [check, build]
     if: needs.check.outputs.npm-published == 'false'
     runs-on: ubuntu-latest
@@ -152,24 +156,38 @@ jobs:
           path: release
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24 # Ships npm 11.5.1+, required for trusted publishing
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Verify npm version
+        run: |
+          # npm stage publish requires npm 11.15.0+
+          NPM_VERSION="$(npm --version)"
+          if ! node -e "const [a,b]=process.argv[1].split('.').map(Number); process.exit(a > 11 || (a === 11 && b >= 15) ? 0 : 1)" "$NPM_VERSION"; then
+            echo "::error::npm $NPM_VERSION is too old for staged publishing (need 11.15.0+)"
+            exit 1
+          fi
       - name: Verify checksum
         working-directory: release
         run: sha256sum --check SHA256SUMS
-      - name: Publish
+      - name: Stage
         working-directory: release
         env:
           PRERELEASE: ${{ needs.check.outputs.prerelease }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           # Prereleases go to the "next" dist-tag so they never become "latest"
           if [ "$PRERELEASE" = true ]; then TAG=next; else TAG=latest; fi
-          npm publish ./*.tgz --access public --tag "$TAG"
+          npm stage publish ./*.tgz --access public --tag "$TAG"
+          {
+            echo "### Staged $VERSION on npm"
+            echo "Approve it with 2FA in the **Staged Packages** tab on npmjs.com, or run \`npm stage list\` and \`npm stage approve <stage-id>\`."
+            echo "It is not public until approved."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   github-release:
     name: Create GitHub release
     needs: [check, build, publish-npm]
-    # Run when npm publish succeeded or was already done, and the tag doesn't exist yet
+    # Run when staging succeeded (or the version is already public), and the tag doesn't exist yet
     if: >-
       always() &&
       needs.build.result == 'success' &&
