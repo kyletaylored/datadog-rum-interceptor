@@ -28,9 +28,19 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-      - run: npm ci
+      # Dependencies never run install scripts; the build runs explicitly below
+      - run: npm ci --ignore-scripts
+      - run: npm audit signatures
       - run: npm audit --audit-level=high
       - run: npm run build
       - run: npm test
-      - name: Verify package contents
-        run: npm pack --dry-run
+      - run: npm run release:check
+      - name: Verify reproducible package
+        run: |
+          mkdir -p "$RUNNER_TEMP/a" "$RUNNER_TEMP/b"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/a"
+          rm -rf dist
+          npm run build
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/b"
+          cmp "$RUNNER_TEMP"/a/*.tgz "$RUNNER_TEMP"/b/*.tgz
+          tar -tzf "$RUNNER_TEMP"/b/*.tgz

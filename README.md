@@ -211,11 +211,27 @@ CI runs `npm audit`, the build, and the tests on every push and pull request.
 
 ### **Releasing**
 
-1. Update `version` in `package.json` (and `package-lock.json`) with `npm version <x.y.z> --no-git-tag-version`, and add an entry to [`CHANGELOG.md`](CHANGELOG.md).
-2. Merge to `main`.
-3. Publish a GitHub release whose tag matches the version (e.g. `0.1.0`).
+Releases are automated by the [release workflow](.github/workflows/release.yml) and triggered by merging a version bump to `main`.
 
-The [publish workflow](.github/workflows/publish.yml) checks that the tag matches `package.json`, runs the audit, build, and tests, then publishes to npm using [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC, with provenance). No npm token is stored in the repository. Running the workflow manually performs a dry run without publishing.
+1. As changes land, add entries under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md).
+2. On a branch, run:
+
+   ```bash
+   npm run release:prepare -- <patch|minor|major|x.y.z>
+   ```
+
+   This bumps the version in `package.json` and `package-lock.json` and moves the Unreleased entries into a dated version section. Open a pull request titled `Release x.y.z`.
+3. Merge the pull request after CI passes. The release workflow then:
+   1. Checks whether the version is already on npm and tagged. If both are true, it does nothing.
+   2. Validates the changelog, installs dependencies without install scripts, verifies dependency signatures, audits, builds, and tests.
+   3. Builds the package twice and fails if the two tarballs aren't byte-identical.
+   4. Signs a build provenance attestation for the tarball.
+   5. Publishes **that same tarball** to npm with [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC, with provenance). No npm token is stored anywhere. Prerelease versions (`x.y.z-rc.1`) go to the `next` dist-tag.
+   6. Creates the git tag and GitHub release with the changelog notes, the tarball, and `SHA256SUMS`.
+
+If a run fails partway through, fix the cause and re-run it (or run the workflow manually from `main`). It only does the steps that haven't completed yet.
+
+See [SECURITY.md](SECURITY.md) for how to verify a release.
 
 ---
 

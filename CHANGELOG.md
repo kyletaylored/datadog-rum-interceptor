@@ -2,7 +2,11 @@
 
 All notable changes to this project are documented here. This project follows [Semantic Versioning](https://semver.org/); while below 1.0, minor versions may contain breaking changes.
 
-## [0.1.0] - Unreleased
+Add entries for upcoming changes under **Unreleased**. `npm run release:prepare` moves them into a dated version section (see [Releasing](README.md#releasing)).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-10-26
 
 ### Security
 - Upgraded Vite 6.0 → 8.3. Resolves build-time advisories in esbuild, rollup, postcss, nanoid, and source-map-js. The published runtime code was not affected.
@@ -12,6 +16,7 @@ All notable changes to this project are documented here. This project follows [S
 ### Added
 - `redactHeaders` option to customize the redacted header list. Pass `[]` to disable redaction.
 - Test suite (Vitest) and CI workflow.
+- Release workflow: each version is built once, checked to be byte-for-byte reproducible, published to npm with provenance, and attached to a GitHub release with a SHA-256 checksum and build attestation.
 
 ### Changed
 - **Breaking:** sensitive headers are redacted by default. To restore the previous behavior, use `init({ redactHeaders: [] })`.
@@ -28,5 +33,6 @@ All notable changes to this project are documented here. This project follows [S
 
 Last release before this changelog was introduced.
 
-[0.1.0]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.0.9...HEAD
+[Unreleased]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.0.9...0.1.0
 [0.0.9]: https://github.com/kyletaylored/datadog-rum-interceptor/releases/tag/0.0.9

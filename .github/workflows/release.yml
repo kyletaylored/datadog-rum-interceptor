@@ -1,0 +1,211 @@
+name: Release
+
+# Releases run when a version bump lands on main (see "Releasing" in README.md).
+# Every step is idempotent: re-running after a partial failure only does what's left
+# (publish to npm and/or create the GitHub release) for the version in package.json.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check release status
+    # Only release from main, including manual runs
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.status.outputs.version }}
+      prerelease: ${{ steps.status.outputs.prerelease }}
+      npm-published: ${{ steps.status.outputs.npm-published }}
+      tag-exists: ${{ steps.status.outputs.tag-exists }}
+      release-needed: ${{ steps.status.outputs.release-needed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Determine version and release status
+        id: status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::package.json version '$VERSION' is not valid semver"
+            exit 1
+          fi
+
+          # Query the registry API directly so npm config (e.g. scoped registries) can't affect the result.
+          # Only a 404 means "not published"; any other failure stops the release.
+          STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/${NAME/\//%2F}/$VERSION")"
+          case "$STATUS" in
+            200) NPM_PUBLISHED=true ;;
+            404) NPM_PUBLISHED=false ;;
+            *) echo "::error::Unexpected npm registry response: $STATUS"; exit 1 ;;
+          esac
+
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          else
+            TAG_EXISTS=false
+          fi
+
+          if [ "$NPM_PUBLISHED" = true ] && [ "$TAG_EXISTS" = true ]; then
+            RELEASE_NEEDED=false
+          else
+            RELEASE_NEEDED=true
+          fi
+
+          case "$VERSION" in *-*) PRERELEASE=true ;; *) PRERELEASE=false ;; esac
+
+          {
+            echo "version=$VERSION"
+            echo "prerelease=$PRERELEASE"
+            echo "npm-published=$NPM_PUBLISHED"
+            echo "tag-exists=$TAG_EXISTS"
+            echo "release-needed=$RELEASE_NEEDED"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### $NAME@$VERSION"
+            echo "- Published to npm: $NPM_PUBLISHED"
+            echo "- Git tag exists: $TAG_EXISTS"
+            echo "- Release needed: $RELEASE_NEEDED"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate changelog
+        if: steps.status.outputs.release-needed == 'true'
+        run: node scripts/release.mjs check
+
+  build:
+    name: Build and verify
+    needs: check
+    if: needs.check.outputs.release-needed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Sign the build provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+      # Dependencies never run install scripts; the build runs explicitly below
+      - run: npm ci --ignore-scripts
+      - run: npm audit signatures
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npm test
+      - name: Pack and verify reproducibility
+        run: |
+          mkdir -p release first
+          npm pack --ignore-scripts --pack-destination first
+          rm -rf dist
+          npm run build
+          npm pack --ignore-scripts --pack-destination release
+          if ! cmp first/*.tgz release/*.tgz; then
+            echo "::error::Package tarball is not reproducible between two clean builds"
+            exit 1
+          fi
+          cd release
+          sha256sum ./*.tgz > SHA256SUMS
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+      - name: Extract release notes
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: node scripts/release.mjs notes "$VERSION" > release/RELEASE_NOTES.md
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/*.tgz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-npm:
+    name: Publish to npm
+    needs: [check, build]
+    if: needs.check.outputs.npm-published == 'false'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      # No checkout or dependency install: this job only publishes the tarball verified by the build job
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24 # Ships npm 11.5.1+, required for trusted publishing
+          registry-url: https://registry.npmjs.org
+      - name: Verify checksum
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      - name: Publish
+        working-directory: release
+        env:
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          # Prereleases go to the "next" dist-tag so they never become "latest"
+          if [ "$PRERELEASE" = true ]; then TAG=next; else TAG=latest; fi
+          npm publish ./*.tgz --access public --tag "$TAG"
+
+  github-release:
+    name: Create GitHub release
+    needs: [check, build, publish-npm]
+    # Run when npm publish succeeded or was already done, and the tag doesn't exist yet
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') &&
+      needs.check.outputs.tag-exists == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Create the tag and release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+      - name: Create release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          sha256sum --check SHA256SUMS
+
+          # A draft left by a failed earlier run has no tag yet; remove it so this run can start clean
+          if [ "$(gh release view "$VERSION" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+            gh release delete "$VERSION" --yes
+          fi
+
+          FLAGS=()
+          if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
+          # Create as a draft with all assets, then publish, so the release is complete when it becomes visible
+          # (required when immutable releases are enabled). Publishing the draft creates the tag at this commit.
+          gh release create "$VERSION" ./*.tgz SHA256SUMS \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            "${FLAGS[@]}"
+          gh release edit "$VERSION" --draft=false

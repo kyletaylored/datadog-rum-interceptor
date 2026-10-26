@@ -25,7 +25,9 @@
     "build": "vite build --config vite.config.es.js && vite build --config vite.config.umd.js",
     "prepare": "npm run build",
     "dev": "vite build --config vite.config.dev.js --watch --mode development",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:check": "node scripts/release.mjs check"
   },
   "keywords": [
     "interceptor",
