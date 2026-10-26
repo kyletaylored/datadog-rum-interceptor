@@ -24,6 +24,8 @@
 npm install @kyletaylored/datadog-rum-interceptor
 ```
 
+Using the package in Node.js (for example, in tests or server-side rendering) requires Node.js 22 or later.
+
 ### **Load via CDN**
 
 For direct use in the **browser**:

@@ -11,6 +11,15 @@ Add entries for upcoming changes under **Unreleased**, grouped as `Added`, `Chan
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
+### Changed
+
+- Updated `@mswjs/interceptors` from 0.37.5 to 0.45.9.
+- **Breaking:** using the package in Node.js now requires Node.js 22 or later, which `@mswjs/interceptors` 0.45 requires. Browser usage is unaffected.
+- The UMD bundle grew from 40.6 kB to 55.9 kB (12.6 kB to 17.9 kB gzipped) because it bundles the newer `@mswjs/interceptors`.
+- Fingerprints now ignore `Set-Cookie` and `Set-Cookie2`. `@mswjs/interceptors` 0.45 exposes these response headers, but browsers never expose them to scripts, so without this change XHR responses that set cookies would no longer match.
+
 ## [0.1.0] - 2026-10-26
 
 ### Added
@@ -111,7 +120,8 @@ Add entries for upcoming changes under **Unreleased**, grouped as `Added`, `Chan
 
 - Initial release: intercepts Fetch and XHR requests with `@mswjs/interceptors` and reports request/response details to Datadog.
 
-[Unreleased]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.0.9...0.1.0
 [0.0.9]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.0.8...0.0.9
 [0.0.8]: https://github.com/kyletaylored/datadog-rum-interceptor/compare/0.0.7...0.0.8
