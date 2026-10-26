@@ -76,6 +76,11 @@ describe('generateResponseFingerprint', () => {
         expect(generateResponseFingerprint(base)).toBe(generateResponseFingerprint({ ...base, timestamp: base.timestamp + 4000 }));
     });
 
+    it('ignores headers browsers never expose to scripts', () => {
+        const withCookies = { ...base, headers: { a: '1', 'Set-Cookie': 'session=secret', 'set-cookie2': 'x=y' } };
+        expect(generateResponseFingerprint(withCookies)).toBe(generateResponseFingerprint(base));
+    });
+
     it('changes across windows and attributes', () => {
         const fp = generateResponseFingerprint(base);
         expect(generateResponseFingerprint({ ...base, timestamp: base.timestamp + 10_000 })).not.toBe(fp);

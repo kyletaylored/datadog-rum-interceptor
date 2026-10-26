@@ -22,7 +22,7 @@ jobs:
     name: Check release status
     # Only release from main, including manual runs
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.status.outputs.version }}
       prerelease: ${{ steps.status.outputs.prerelease }}
@@ -92,7 +92,7 @@ jobs:
     name: Build and verify
     needs: check
     if: needs.check.outputs.release-needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write # Sign the build provenance attestation
@@ -143,7 +143,7 @@ jobs:
     name: Stage on npm
     needs: [check, build]
     if: needs.check.outputs.npm-published == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: npm
     permissions:
       contents: read
@@ -193,7 +193,7 @@ jobs:
       needs.build.result == 'success' &&
       (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') &&
       needs.check.outputs.tag-exists == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # Create the tag and release
     steps:

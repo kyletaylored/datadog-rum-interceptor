@@ -12,6 +12,10 @@ const EXPIRATION_TIME_MS = 5000; // Auto-remove unmatched requests after 5s
 const RESPONSE_EXPIRATION_TIME_MS = 30000; // Auto-remove unclaimed responses after 30s
 const responseTimers = new Map(); // Expiration timers for stored responses
 
+// Response headers browsers never expose to scripts (fetch and XHR "forbidden response-header names").
+// Interceptors may still see them, so they're excluded from fingerprints to keep both sides comparable.
+const UNEXPOSED_RESPONSE_HEADERS = ['set-cookie', 'set-cookie2'];
+
 /**
  * Stores a request temporarily using the requestId provided by the interceptor.
  * @param {string} requestId - The request identifier.
@@ -92,7 +96,10 @@ export function generateResponseFingerprint(data, context = 'default') {
         const url = data.url || '';
         const status = data.status || 200;
         const timestamp = Math.floor(data.timestamp / 10000); // Round to 10 seconds
-        const headers = hashJsonObject(data.headers) || '';
+        const exposedHeaders = data.headers && typeof data.headers === 'object'
+            ? Object.fromEntries(Object.entries(data.headers).filter(([key]) => !UNEXPOSED_RESPONSE_HEADERS.includes(key.toLowerCase())))
+            : data.headers;
+        const headers = hashJsonObject(exposedHeaders) || '';
 
         // Generate a stable fingerprint hash
         const fingerprintString = `${method}:${url}:${status}:${headers}:${timestamp}`;
